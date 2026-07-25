@@ -5,14 +5,23 @@ import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ICseRequest, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE } from '../../../models/ICseRequest';
+import { SOLUTIONS } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
+
+const codeToName = (codes: string): string => {
+  if (!codes) return '—';
+  return codes.split(',').map(c => {
+    const sol = SOLUTIONS.find(s => s.code === c.trim());
+    return sol ? sol.name : c.trim();
+  }).join(', ');
+};
 
 export interface ISrtDashboardProps {
   sp: SPFI;
   context: WebPartContext;
 }
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -128,7 +137,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                         <div style={{ fontSize: 11, color: '#888' }}>{req.buRegion}</div>
                       </td>
                       <td style={{ ...TD, fontSize: 11, maxWidth: 140 }}>
-                        {req.solutionsFocus ? req.solutionsFocus.split(',').join(', ') : '—'}
+                        {codeToName(req.solutionsFocus)}
                       </td>
                       <td style={TD}>
                         <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
