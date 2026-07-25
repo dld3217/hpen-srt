@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/spfx-serve.schema.json",
+  "port": 4322,
+  "https": true,
+  "hostname": "127.0.0.1",
+  "serveConfigurations": {
+    "default": {
+      "pageUrl": "https://hpe.sharepoint.com/teams/hpen-poc-manager/_layouts/15/workbench.aspx"
+    }
+  }
+}

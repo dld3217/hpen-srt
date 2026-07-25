@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "sse-request-form-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/sseRequestForm/SseRequestFormWebPart.js",
+          "manifest": "./src/webparts/sseRequestForm/SseRequestFormWebPart.manifest.json"
+        }
+      ]
+    },
+    "srt-dashboard-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/srtDashboard/SrtDashboardWebPart.js",
+          "manifest": "./src/webparts/srtDashboard/SrtDashboardWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {}
+}

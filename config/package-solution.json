@@ -1,0 +1,50 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "hpen-srt-client-side-solution",
+    "id": "62d11a5a-c225-413d-b10d-53ff6647595b",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.20.0"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "HPEN SSE Support Request Tracker"
+      },
+      "longDescription": {
+        "default": "HPEN SSE Support Request Tracker — intake form, dashboard, and scheduling workflow for Strategic Systems Engineer engagements"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "webApiPermissionRequests": [
+      {
+        "resource": "Microsoft Graph",
+        "scope": "User.ReadBasic.All"
+      },
+      {
+        "resource": "Microsoft Graph",
+        "scope": "Mail.Send"
+      }
+    ],
+    "features": [
+      {
+        "title": "hpen-srt Feature",
+        "description": "The feature that activates elements of the hpen-srt solution.",
+        "id": "5de146d8-0a04-4ac4-83ee-244bc3c0e28d",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/hpen-srt.sppkg"
+  }
+}

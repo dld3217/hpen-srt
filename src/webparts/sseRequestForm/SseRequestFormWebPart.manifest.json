@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx/client-side-web-part-manifest.schema.json",
+  "id": "708d3677-5a99-49e3-a419-1ceb38ee01a4",
+  "alias": "SseRequestFormWebPart",
+  "componentType": "WebPart",
+
+  "version": "*",
+  "manifestVersion": 2,
+
+  "requiresCustomScript": false,
+  "supportedHosts": ["SharePointWebPart", "SharePointFullPage"],
+  "supportsThemeVariants": true,
+
+  "preconfiguredEntries": [{
+    "groupId": "5c03119e-3074-46fd-976b-c60198311f70",
+    "group": { "default": "Advanced" },
+    "title": { "default": "SSE Request Form" },
+    "description": { "default": "HPEN Strategic Systems Engineer Support Request Form" },
+    "officeFabricIconFontName": "People",
+    "properties": {
+      "description": "SSE Request Form"
+    }
+  }]
+}
