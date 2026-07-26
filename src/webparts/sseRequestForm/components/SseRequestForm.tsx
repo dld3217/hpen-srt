@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { SPFI } from '@pnp/sp';
-import { MSGraphClientV3 } from '@microsoft/sp-http';
+import { SPFI, PrincipalType, PrincipalSource } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
+import '@pnp/sp/sputilities';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { ConfigService, BURegionMap, IBUConfig } from '../../../services/ConfigService';
 import { CseRequestService } from '../../../services/CseRequestService';
@@ -60,15 +60,25 @@ const EMPTY_FORM: ISseFormData = {
   opportunityAmount: 0,
 };
 
+const VERSION = '1.0.16';
+
+const greeting = (): string => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+const firstName = (displayName: string): string => {
+  if (!displayName) return '';
+  // Handle "Last, First Middle" enterprise AD format
+  if (displayName.includes(',')) return displayName.split(',')[1].trim().split(' ')[0];
+  // Handle "First Last" standard format
+  return displayName.split(' ')[0];
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const toDateTimeInput = (iso: string): string => iso ? iso.substring(0, 16) : '';
-const fromDateTimeInput = (val: string): string => val ? new Date(val).toISOString() : '';
-const toIcalDt = (iso: string): string =>
-  iso.replace(/[-:]/g, '').replace(/\.\d{3}/, '').replace(/Z$/, '') + 'Z';
-
-const fmtAmt = (n: number): string =>
-  n ? `$${Number(n).toLocaleString()}` : 'TBD';
 
 // ── Inline styles ─────────────────────────────────────────────────────────────
 
@@ -198,6 +208,21 @@ const PeoplePickerField: React.FC<{
 
 // ── Schedule Block ────────────────────────────────────────────────────────────
 
+const calcDuration = (start: string, end: string): string => {
+  if (!start || !end) return '';
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms <= 0) return '';
+  const totalMinutes = Math.round(ms / 60000);
+  const days  = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const mins  = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days  > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+  if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
+  if (mins  > 0 && days === 0) parts.push(`${mins} min`);
+  return parts.join(' ');
+};
+
 const ScheduleBlock: React.FC<{
   label: string;
   tbd: boolean;
@@ -205,31 +230,61 @@ const ScheduleBlock: React.FC<{
   end: string;
   duration: string;
   destination?: string;
+  dateOnly?: boolean;
   onTbd: (v: boolean) => void;
   onStart: (v: string) => void;
   onEnd: (v: string) => void;
   onDuration: (v: string) => void;
   onDestination?: (v: string) => void;
-}> = ({ label, tbd, start, end, duration, destination, onTbd, onStart, onEnd, onDuration, onDestination }) => (
+}> = ({ label, tbd, start, end, duration, destination, dateOnly, onTbd, onStart, onEnd, onDuration, onDestination }) => {
+  const toInput = (iso: string): string => {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      if (dateOnly) return d.toLocaleDateString('sv');
+      return d.toLocaleDateString('sv') + 'T' + d.toLocaleTimeString('sv').substring(0, 5);
+    } catch { return ''; }
+  };
+  const fromInput = (val: string): string => val ? new Date(val).toISOString() : '';
+  return (
   <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
-    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{label}</div>
-    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8, cursor: 'pointer' }}>
-      <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
-      Dates TBD
-    </label>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', margin: 0 }}>
+        <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
+        Dates TBD
+      </label>
+    </div>
     {!tbd && (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <div>
-          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Start</label>
-          <input type="datetime-local" value={toDateTimeInput(start)}
-            onChange={e => onStart(fromDateTimeInput(e.target.value))} style={INPUT} />
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
+          <div>
+            <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Start</label>
+            <input type={dateOnly ? 'date' : 'datetime-local'} value={toInput(start)}
+              onChange={e => {
+                const newStart = fromInput(e.target.value);
+                onStart(newStart);
+                if (newStart && end) onDuration(calcDuration(newStart, end));
+              }} style={INPUT} />
+          </div>
+          <div>
+            <label style={{ ...LABEL_STYLE, fontSize: 11 }}>End</label>
+            <input type={dateOnly ? 'date' : 'datetime-local'} value={toInput(end)}
+              onChange={e => {
+                const newEnd = fromInput(e.target.value);
+                onEnd(newEnd);
+                if (start && newEnd) onDuration(calcDuration(start, newEnd));
+              }} style={INPUT} />
+          </div>
+          <button type="button" onClick={() => { onTbd(true); onStart(''); onEnd(''); onDuration(''); }}
+            title="Clear dates"
+            style={{ height: 32, padding: '0 10px', fontSize: 16, lineHeight: 1, background: 'transparent',
+              border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c', marginBottom: 1 }}>
+            ✕
+          </button>
         </div>
-        <div>
-          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>End</label>
-          <input type="datetime-local" value={toDateTimeInput(end)}
-            onChange={e => onEnd(fromDateTimeInput(e.target.value))} style={INPUT} />
-        </div>
-      </div>
+      </>
     )}
     <div>
       <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
@@ -244,7 +299,8 @@ const ScheduleBlock: React.FC<{
       </div>
     )}
   </div>
-);
+  );
+};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -264,7 +320,17 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   useEffect(() => {
     const configSvc = new ConfigService(sp);
     Promise.all([configSvc.getBURegions(), configSvc.getSolutions()])
-      .then(([bur, sols]) => { setBuRegions(bur); setSolutions(sols); setLoading(false); })
+      .then(([bur, sols]) => {
+        setBuRegions(bur);
+        setSolutions(sols);
+        const savedBU = localStorage.getItem('srt_bu') || '';
+        const savedRegion = localStorage.getItem('srt_region') || '';
+        if (savedBU && bur[savedBU]) {
+          const validRegion = savedRegion && (bur[savedBU] as IBUConfig)?.regions?.[savedRegion] ? savedRegion : '';
+          setFormData(prev => ({ ...prev, hpenBusinessUnit: savedBU, buRegion: validRegion }));
+        }
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -273,61 +339,16 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
   const handleSearchUsers = async (query: string): Promise<IGraphUser[]> => {
     try {
-      const client: MSGraphClientV3 = await context.msGraphClientFactory.getClient('3');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const response: any = await client.api('/users')
-        .header('ConsistencyLevel', 'eventual')
-        .search(`"displayName:${query.replace(/"/g, '')}"`)
-        .select('displayName,mail')
-        .top(10)
-        .get();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return ((response.value || []) as any[])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter((u: any) => u.mail)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((u: any) => ({ displayName: String(u.displayName || ''), mail: String(u.mail || '') }));
-    } catch { return []; }
-  };
-
-  const buildIcs = (): string => {
-    const sseField = formData.requestedSse;
-    const sseEmail = sseField.includes('/') ? sseField.split('/').pop()!.trim() : '';
-    const sseName  = sseField.includes('/') ? sseField.split('/')[0].trim() : sseField.trim();
-    if (!sseEmail) return '';
-
-    const nowDt  = toIcalDt(new Date().toISOString());
-    const uid    = `sse-${Date.now()}@hpe-sse-request`;
-    const summary = `SSE Support Request — ${formData.customerName || 'Customer'} [${formData.csePriority || 'TBD'} Priority]`;
-    const desc   = `Requested by: ${userDisplayName}\\nCustomer: ${formData.customerName || 'TBD'}\\nPOC: ${formData.pocName || 'N/A'}\\nDescription: ${formData.cseDescription || 'TBD'}`;
-
-    const makeEvent = (start: string, end: string, location: string, suffix: string): string => {
-      if (!start) return '';
-      return [
-        'BEGIN:VEVENT',
-        `UID:${uid}-${suffix}`,
-        `DTSTAMP:${nowDt}`,
-        `DTSTART:${toIcalDt(start)}`,
-        `DTEND:${toIcalDt(end || start)}`,
-        `SUMMARY:${summary}`,
-        `DESCRIPTION:${desc}`,
-        location ? `LOCATION:${location}` : '',
-        `ORGANIZER;CN=${userDisplayName}:MAILTO:${userEmail}`,
-        `ATTENDEE;RSVP=TRUE;PARTSTAT=NEEDS-ACTION;CN=${sseName}:MAILTO:${sseEmail}`,
-        'END:VEVENT',
-      ].filter(Boolean).join('\r\n');
-    };
-
-    const events: string[] = [];
-    if ((formData.supportType === 'Remote' || formData.supportType === 'Both') && !formData.remoteTbd && formData.remoteStart) {
-      events.push(makeEvent(formData.remoteStart, formData.remoteEnd, 'Remote', 'remote'));
+      const results = await sp.utility.searchPrincipals(
+        query, PrincipalType.User, PrincipalSource.All, '', 10
+      );
+      return results
+        .filter(r => r.Email)
+        .map(r => ({ displayName: r.DisplayName, mail: r.Email }));
+    } catch (err) {
+      console.error('[SRT] People picker exception:', err);
+      return [];
     }
-    if ((formData.supportType === 'On-Site' || formData.supportType === 'Both') && !formData.onsiteTbd && formData.onsiteStart) {
-      events.push(makeEvent(formData.onsiteStart, formData.onsiteEnd, formData.onsiteDestination || 'On-Site', 'onsite'));
-    }
-    if (events.length === 0) return '';
-
-    return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//HPE SSE Request Form//EN', 'METHOD:REQUEST', ...events, 'END:VCALENDAR'].join('\r\n');
   };
 
   const validate = (): string[] => {
@@ -350,132 +371,51 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     setSubmitError('');
 
     try {
-      const buConfig   = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
-      const sedEmail   = buConfig?.sedEmail || '';
-      const regionCfg  = buConfig?.regions[formData.buRegion] || {};
-      const semEmail   = regionCfg.semEmail || '';
-      const sseField   = formData.requestedSse;
-      const sseEmail   = sseField.includes('/') ? sseField.split('/').pop()!.trim() : '';
-      const sseName    = sseField.includes('/') ? sseField.split('/')[0].trim() : sseField.trim();
-      const priority   = formData.csePriority || 'TBD';
-      const supportType = formData.supportType;
+      const buConfig  = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
+      const sedEmail  = buConfig?.sedEmail || '';
+      const regionCfg = buConfig?.regions[formData.buRegion] || {};
+      const semEmail  = regionCfg.semEmail || '';
 
-      const remoteLines: string[] = [];
-      if (supportType === 'Remote' || supportType === 'Both') {
-        remoteLines.push(`  TBD: ${formData.remoteTbd ? 'Yes' : 'No'}`);
-        if (!formData.remoteTbd) {
-          if (formData.remoteStart) remoteLines.push(`  Start: ${new Date(formData.remoteStart).toLocaleString()}`);
-          if (formData.remoteEnd)   remoteLines.push(`  End:   ${new Date(formData.remoteEnd).toLocaleString()}`);
-        }
-        if (formData.remoteDuration) remoteLines.push(`  Duration: ${formData.remoteDuration}`);
-      }
-      const onsiteLines: string[] = [];
-      if (supportType === 'On-Site' || supportType === 'Both') {
-        onsiteLines.push(`  TBD: ${formData.onsiteTbd ? 'Yes' : 'No'}`);
-        if (!formData.onsiteTbd) {
-          if (formData.onsiteStart) onsiteLines.push(`  Start: ${new Date(formData.onsiteStart).toLocaleString()}`);
-          if (formData.onsiteEnd)   onsiteLines.push(`  End:   ${new Date(formData.onsiteEnd).toLocaleString()}`);
-        }
-        if (formData.onsiteDuration)    onsiteLines.push(`  Duration: ${formData.onsiteDuration}`);
-        if (formData.onsiteDestination) onsiteLines.push(`  Destination: ${formData.onsiteDestination}`);
-      }
-
-      const focusNames = formData.solutionsFocus
-        ? formData.solutionsFocus.split(',').map(code => {
-            const sol = solutions.find(s => s.code === code.trim());
-            return sol ? sol.name : code.trim();
-          }).join(', ')
-        : 'TBD';
-
-      const bodyText = [
-        `Customer Name: ${formData.customerName || 'TBD'}`,
-        formData.pocName ? `POC Name: ${formData.pocName}` : '',
-        `Requesting SE: ${userDisplayName}`,
-        sseName ? `Requested SSE: ${sseName}` : '',
-        ``,
-        `Solutions Focus: ${focusNames}`,
-        `Description of Need & Skill Set: ${formData.cseDescription || 'TBD'}`,
-        ``,
-        `Priority Level: ${priority}`,
-        `Why / Reason: ${formData.csePriorityReason || 'TBD'}`,
-        ``,
-        `Support Type: ${supportType}`,
-        ...(remoteLines.length ? ['Remote Schedule:', ...remoteLines] : []),
-        ...(onsiteLines.length ? ['On-Site Schedule:', ...onsiteLines] : []),
-        ``,
-        `Opportunity $: ${fmtAmt(formData.opportunityAmount)}`,
-      ].filter(l => l !== undefined).join('\n');
-
-      const subject = `SSE Support Request — ${formData.customerName} [${priority} Priority]`;
-      const toEmails = [semEmail, sedEmail, sseEmail].filter(Boolean);
-
-      const icsContent = buildIcs();
-
-      const client: MSGraphClientV3 = await context.msGraphClientFactory.getClient('3');
-      const attachments = icsContent ? [{
-        '@odata.type': '#microsoft.graph.fileAttachment',
-        name: `SSE-Request-${(formData.customerName || 'Customer').replace(/\s+/g, '-')}.ics`,
-        contentType: 'text/calendar',
-        contentBytes: btoa(icsContent),
-      }] : [];
-
-      await client.api('/me/sendMail').post({
-        message: {
-          subject,
-          body: { contentType: 'Text', content: bodyText },
-          toRecipients: toEmails.map(email => ({ emailAddress: { address: email } })),
-          attachments,
-        },
-        saveToSentItems: true,
+      const svc = new CseRequestService(sp);
+      await svc.create({
+        title: `${formData.customerName} — SSE Request`,
+        source: 'SE Landing Page',
+        linkedPocId: 0,
+        requestStatus: 'Pending',
+        scheduleStatus: (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' : 'Dates Proposed',
+        requestedCse: formData.requestedSse,
+        sseManagerEmail: '',
+        cseDescription: formData.cseDescription,
+        csePriority: formData.csePriority,
+        csePriorityReason: formData.csePriorityReason,
+        solutionsFocus: formData.solutionsFocus,
+        supportType: formData.supportType,
+        remoteTbd: formData.remoteTbd,
+        remoteStart: formData.remoteStart,
+        remoteEnd: formData.remoteEnd,
+        remoteDuration: formData.remoteDuration,
+        onsiteTbd: formData.onsiteTbd,
+        onsiteStart: formData.onsiteStart,
+        onsiteEnd: formData.onsiteEnd,
+        onsiteDuration: formData.onsiteDuration,
+        onsiteDestination: formData.onsiteDestination,
+        sePrimary: `${userDisplayName} / ${userEmail}`,
+        semPrimary: semEmail,
+        sedEmail,
+        buRegion: formData.buRegion,
+        hpenBusinessUnit: formData.hpenBusinessUnit,
+        customerName: formData.customerName,
+        pocName: formData.pocName,
+        opportunityAmount: formData.opportunityAmount,
+        custTemp: 'Normal',
+        signedOffBy: '',
+        signOffDate: '',
+        notes: '',
       });
-
-      try {
-        const svc = new CseRequestService(sp);
-        await svc.create({
-          title: `${formData.customerName} — SSE Request`,
-          source: 'SE Landing Page',
-          linkedPocId: 0,
-          requestStatus: 'Pending',
-          scheduleStatus: (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' : 'Dates Proposed',
-          requestedCse: formData.requestedSse,
-          sseManagerEmail: '',
-          cseDescription: formData.cseDescription,
-          csePriority: formData.csePriority,
-          csePriorityReason: formData.csePriorityReason,
-          solutionsFocus: formData.solutionsFocus,
-          supportType: formData.supportType,
-          remoteTbd: formData.remoteTbd,
-          remoteStart: formData.remoteStart,
-          remoteEnd: formData.remoteEnd,
-          remoteDuration: formData.remoteDuration,
-          onsiteTbd: formData.onsiteTbd,
-          onsiteStart: formData.onsiteStart,
-          onsiteEnd: formData.onsiteEnd,
-          onsiteDuration: formData.onsiteDuration,
-          onsiteDestination: formData.onsiteDestination,
-          sePrimary: `${userDisplayName} / ${userEmail}`,
-          semPrimary: semEmail,
-          sedEmail,
-          buRegion: formData.buRegion,
-          hpenBusinessUnit: formData.hpenBusinessUnit,
-          customerName: formData.customerName,
-          pocName: formData.pocName,
-          opportunityAmount: formData.opportunityAmount,
-          custTemp: 'Normal',
-          signedOffBy: '',
-          signOffDate: '',
-          notes: '',
-        });
-      } catch { /* SP write failure is non-blocking */ }
 
       setSubmitted(true);
     } catch (err) {
-      const msg = (err as Error)?.message || String(err);
-      if (msg.includes('403') || msg.includes('Forbidden')) {
-        setSubmitError('Mail.Send permission not yet approved. Please ask your SharePoint admin to approve it in SharePoint Admin Center → Advanced → API access.');
-      } else {
-        setSubmitError(`Send failed: ${msg}`);
-      }
+      setSubmitError(`Submit failed: ${(err as Error)?.message || String(err)}`);
     } finally {
       setSubmitting(false);
     }
@@ -495,8 +435,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
         <div style={{ fontSize: 22, fontWeight: 700, color: HPE_NAVY, marginBottom: 8 }}>Request Sent</div>
         <div style={{ fontSize: 14, color: '#605e5c', marginBottom: 24 }}>
-          Your SSE support request for <strong>{formData.customerName}</strong> has been sent to the SEM, SED, and SSE.
-          {buildIcs() ? ' A calendar invite is attached to the email.' : ''}
+          Your SSE support request for <strong>{formData.customerName}</strong> has been submitted. The SSE team will be notified shortly.
         </div>
         <button
           onClick={() => { setFormData(EMPTY_FORM); setSubmitted(false); }}
@@ -511,11 +450,17 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
 
       {/* Header */}
-      <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 3, height: 22, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2 }}>SSE Support Request</div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — Strategic Systems Engineer</div>
+      <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 3, height: 22, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2 }}>SSE Support Request</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — Strategic Systems Engineer</div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{greeting()}, {firstName(userDisplayName)}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</div>
         </div>
       </div>
 
@@ -554,7 +499,12 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           <div style={FIELD_ROW}>
             <label style={LABEL_STYLE}>Business Unit <span style={{ color: '#d13438' }}>*</span></label>
             <select value={formData.hpenBusinessUnit}
-              onChange={e => set('hpenBusinessUnit', e.target.value)}
+              onChange={e => {
+                const newBU = e.target.value;
+                setFormData(prev => ({ ...prev, hpenBusinessUnit: newBU, buRegion: '' }));
+                if (newBU) localStorage.setItem('srt_bu', newBU); else localStorage.removeItem('srt_bu');
+                localStorage.removeItem('srt_region');
+              }}
               style={INPUT}>
               <option value="">— Select BU —</option>
               {buKeys.map(bu => <option key={bu} value={bu}>{bu}</option>)}
@@ -563,7 +513,10 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           <div style={FIELD_ROW}>
             <label style={LABEL_STYLE}>Region <span style={{ color: '#d13438' }}>*</span></label>
             <select value={formData.buRegion}
-              onChange={e => set('buRegion', e.target.value)}
+              onChange={e => {
+                set('buRegion', e.target.value);
+                if (e.target.value) localStorage.setItem('srt_region', e.target.value); else localStorage.removeItem('srt_region');
+              }}
               disabled={!formData.hpenBusinessUnit}
               style={INPUT}>
               <option value="">— Select Region —</option>
@@ -661,6 +614,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         {(formData.supportType === 'Remote' || formData.supportType === 'Both') && (
           <ScheduleBlock
             label="Remote Schedule"
+            dateOnly
             tbd={formData.remoteTbd}
             start={formData.remoteStart}
             end={formData.remoteEnd}

@@ -21,7 +21,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.16';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -36,8 +36,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
 
-  const userEmail = context.pageContext.user.email.toLowerCase();
-  const userName  = context.pageContext.user.displayName || userEmail;
+  const userEmail    = context.pageContext.user.email.toLowerCase();
+  const displayName  = context.pageContext.user.displayName || userEmail;
+  const userName     = displayName.includes(',')
+    ? displayName.split(',')[1].trim().split(' ')[0]
+    : displayName.split(' ')[0];
 
   useEffect(() => {
     const svc = new CseRequestService(sp);
@@ -72,8 +75,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>Welcome, {userName}</span>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>v{VERSION}</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</span>
         </div>
       </div>
 
