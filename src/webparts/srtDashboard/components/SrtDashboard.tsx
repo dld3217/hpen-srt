@@ -62,7 +62,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.22';
+const VERSION = '1.0.23';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -400,9 +400,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               </thead>
               <tbody>
                 {filteredRequests.map((req, i) => {
-                  const statusStyle   = CSE_STATUS_STYLE[req.requestStatus];
-                  const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus];
-                  const tempStyle     = CUST_TEMP_STYLE[req.custTemp];
+                  const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
+                  const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus] || SCHEDULE_STATUS_STYLE.TBD;
+                  const tempStyle     = CUST_TEMP_STYLE[req.custTemp]    || CUST_TEMP_STYLE.Normal;
                   const sseName       = parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse);
                   const isExpanded    = expandedId === req.id;
                   const isCancelled   = req.requestStatus === 'Cancelled';
