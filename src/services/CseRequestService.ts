@@ -166,6 +166,14 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update(update);
   }
 
+  async cancelRequest(id: number, reason: string, note?: string): Promise<void> {
+    const notesValue = [reason, note].filter(Boolean).join(' — ');
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
+      RequestStatus: 'Cancelled',
+      Notes: notesValue,
+    });
+  }
+
   async updateCustTemp(id: number, custTemp: CustTemp): Promise<void> {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ CustTemp: custTemp });
   }

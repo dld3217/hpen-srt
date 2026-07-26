@@ -1,4 +1,4 @@
-export type CseRequestStatus = 'Pending' | 'Accepted' | 'Scheduled' | 'In Progress' | 'Complete' | 'Declined';
+export type CseRequestStatus = 'Pending' | 'Accepted' | 'Scheduled' | 'In Progress' | 'Complete' | 'Declined' | 'Needs Info' | 'Cancelled';
 export type ScheduleStatus = 'TBD' | 'Dates Proposed' | 'Dates Confirmed' | 'Rescheduling';
 export type CustTemp = 'Low' | 'Normal' | 'High' | 'Critical';
 
@@ -46,6 +46,8 @@ export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: str
   'In Progress': { bg: '#fff4ce', color: '#8a6000' },
   'Complete':    { bg: '#e8faf3', color: '#107c10' },
   'Declined':    { bg: '#fde7e9', color: '#a4262c' },
+  'Needs Info':  { bg: '#f0e6ff', color: '#6b2faf' },
+  'Cancelled':   { bg: '#f0f0f0', color: '#a19f9d' },
 };
 
 export const CUST_TEMP_STYLE: Record<CustTemp, { bg: string; color: string; label: string }> = {

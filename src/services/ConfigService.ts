@@ -44,6 +44,42 @@ function migrateBURegions(raw: Record<string, any>): BURegionMap {
 export class ConfigService {
   constructor(private _sp: SPFI) {}
 
+  public async getSuperUsers(): Promise<string[]> {
+    try {
+      // Use SRTSuperUsers key; fall back to SuperUsers (POC Manager key) if not yet seeded
+      let items: { Value: string }[] = await this._sp.web.lists
+        .getByTitle('AppConfig').items
+        .filter("Title eq 'SRTSuperUsers'").select('Value')();
+      if (items.length === 0 || !items[0].Value) {
+        items = await this._sp.web.lists
+          .getByTitle('AppConfig').items
+          .filter("Title eq 'SuperUsers'").select('Value')();
+      }
+      if (items.length > 0 && items[0].Value) {
+        return items[0].Value.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+      }
+    } catch { /* fall through */ }
+    return [];
+  }
+
+  public async isSuperUser(email: string): Promise<boolean> {
+    const users = await this.getSuperUsers();
+    return users.includes(email.trim().toLowerCase());
+  }
+
+  public async saveSuperUsers(users: string[]): Promise<void> {
+    const items: { Id: number }[] = await this._sp.web.lists
+      .getByTitle('AppConfig').items
+      .filter("Title eq 'SRTSuperUsers'").select('Id')();
+    if (items.length > 0) {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .getById(items[0].Id).update({ Value: users.join(',') });
+    } else {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .add({ Title: 'SRTSuperUsers', Value: users.join(',') });
+    }
+  }
+
   public async getSolutions(): Promise<ISolutionDef[]> {
     try {
       const items: { Value: string }[] = await this._sp.web.lists
