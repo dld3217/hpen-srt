@@ -62,7 +62,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.21';
+const VERSION = '1.0.22';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -95,6 +95,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [signOffName, setSignOffName]           = useState('');
   const [filterStatus, setFilterStatus]         = useState('All');
   const [filterBU, setFilterBU]                 = useState('All');
+  const [filterRegion, setFilterRegion]         = useState('All');
   const [filterPriority, setFilterPriority]     = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
 
@@ -266,11 +267,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         r.requestStatus !== 'Cancelled'
       );
 
-  const buOptions = Array.from(new Set(visibleRequests.map(r => r.hpenBusinessUnit).filter(Boolean))).sort();
+  const buOptions     = Array.from(new Set(visibleRequests.map(r => r.hpenBusinessUnit).filter(Boolean))).sort();
+  const regionOptions = Array.from(new Set(visibleRequests.map(r => r.buRegion).filter(Boolean))).sort();
 
   const filteredRequests = visibleRequests.filter(r => {
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
+    if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
     if (filterPriority !== 'All' && r.csePriority !== filterPriority) return false;
     if (filterSearch && !r.customerName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
     return true;
@@ -355,13 +358,18 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <option value="All">All BUs</option>
             {buOptions.map(bu => <option key={bu} value={bu}>{bu}</option>)}
           </select>
+          <select value={filterRegion} onChange={e => setFilterRegion(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="All">All Regions</option>
+            {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
           <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
             style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
             <option value="All">All Priority</option>
             {['Low','Medium','High','Critical'].map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {(filterStatus !== 'All' || filterBU !== 'All' || filterPriority !== 'All' || filterSearch) && (
-            <button onClick={() => { setFilterStatus('All'); setFilterBU('All'); setFilterPriority('All'); setFilterSearch(''); }}
+          {(filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterSearch) && (
+            <button onClick={() => { setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
             </button>
