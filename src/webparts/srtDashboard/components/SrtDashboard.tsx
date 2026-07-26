@@ -62,7 +62,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.20';
+const VERSION = '1.0.21';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -91,6 +91,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [cancelId, setCancelId]                 = useState<number | null>(null);
   const [cancelReason, setCancelReason]         = useState('');
   const [cancelNote, setCancelNote]             = useState('');
+  const [signOffId, setSignOffId]               = useState<number | null>(null);
+  const [signOffName, setSignOffName]           = useState('');
+  const [filterStatus, setFilterStatus]         = useState('All');
+  const [filterBU, setFilterBU]                 = useState('All');
+  const [filterPriority, setFilterPriority]     = useState('All');
+  const [filterSearch, setFilterSearch]         = useState('');
 
   const userEmail    = context.pageContext.user.email.toLowerCase();
   const displayName  = context.pageContext.user.displayName || userEmail;
@@ -219,6 +225,26 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } finally { setSavingDates(false); }
   };
 
+  const handleCustTemp = async (id: number, temp: string): Promise<void> => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t = temp as any;
+    try {
+      await new CseRequestService(sp).updateCustTemp(id, t);
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, custTemp: t } : r));
+    } catch { /* ignore */ }
+  };
+
+  const handleSignOff = async (id: number): Promise<void> => {
+    if (!signOffName.trim()) return;
+    setSavingId(id);
+    try {
+      await new CseRequestService(sp).signOff(id, signOffName.trim());
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, signedOffBy: signOffName.trim(), signOffDate: new Date().toISOString() } : r));
+      setSignOffId(null);
+      setSignOffName('');
+    } finally { setSavingId(null); }
+  };
+
   const canCancel = (req: ICseRequest): boolean => {
     if (['Complete', 'Cancelled', 'Declined'].includes(req.requestStatus)) return false;
     if (isAdmin) return true;
@@ -239,6 +265,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         r.sePrimary.toLowerCase().includes(userEmail) &&
         r.requestStatus !== 'Cancelled'
       );
+
+  const buOptions = Array.from(new Set(visibleRequests.map(r => r.hpenBusinessUnit).filter(Boolean))).sort();
+
+  const filteredRequests = visibleRequests.filter(r => {
+    if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
+    if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
+    if (filterPriority !== 'All' && r.csePriority !== filterPriority) return false;
+    if (filterSearch && !r.customerName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    return true;
+  });
 
   const pending      = visibleRequests.filter(r => r.requestStatus === 'Pending');
   const needsInfo    = visibleRequests.filter(r => r.requestStatus === 'Needs Info');
@@ -296,7 +332,40 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {/* Request table */}
       <div style={{ padding: '16px 20px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 6 }}>
-          {isAdmin ? 'All Requests' : 'My Requests'} ({visibleRequests.length})
+          {isAdmin ? 'All Requests' : 'My Requests'} ({filteredRequests.length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
+        </div>
+
+        {/* Filter bar */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            placeholder="Search customer…"
+            style={{ fontSize: 12, padding: '5px 10px', border: '1px solid #ccc', borderRadius: 4, minWidth: 160 }}
+          />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="All">All Status</option>
+            {['Pending','Accepted','Scheduled','In Progress','Complete','Declined','Needs Info','Cancelled'].map(s =>
+              <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterBU} onChange={e => setFilterBU(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="All">All BUs</option>
+            {buOptions.map(bu => <option key={bu} value={bu}>{bu}</option>)}
+          </select>
+          <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="All">All Priority</option>
+            {['Low','Medium','High','Critical'].map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {(filterStatus !== 'All' || filterBU !== 'All' || filterPriority !== 'All' || filterSearch) && (
+            <button onClick={() => { setFilterStatus('All'); setFilterBU('All'); setFilterPriority('All'); setFilterSearch(''); }}
+              style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
+              Clear Filters
+            </button>
+          )}
         </div>
 
         {visibleRequests.length === 0 ? (
@@ -322,7 +391,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 </tr>
               </thead>
               <tbody>
-                {visibleRequests.map((req, i) => {
+                {filteredRequests.map((req, i) => {
                   const statusStyle   = CSE_STATUS_STYLE[req.requestStatus];
                   const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus];
                   const tempStyle     = CUST_TEMP_STYLE[req.custTemp];
@@ -387,18 +456,63 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                           </div>
                         )}
                       </td>
-                      <td style={TD}>
-                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                          background: tempStyle.bg, color: tempStyle.color }}>
-                          {req.custTemp}
-                        </span>
+                      <td style={TD} onClick={e => e.stopPropagation()}>
+                        {isAdmin ? (
+                          <select
+                            value={req.custTemp}
+                            onChange={e => handleCustTemp(req.id!, e.target.value).catch(() => undefined)}
+                            style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                              background: tempStyle.bg, color: tempStyle.color,
+                              border: 'none', cursor: 'pointer' }}>
+                            {(['Low','Normal','High','Critical']).map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                            background: tempStyle.bg, color: tempStyle.color }}>
+                            {req.custTemp}
+                          </span>
+                        )}
                       </td>
-                      <td style={TD}>
-                        {req.signedOffBy
-                          ? <div style={{ fontSize: 11, color: '#107c10' }}>✓ {req.signedOffBy}</div>
-                          : req.requestStatus === 'Complete'
-                            ? <span style={{ fontSize: 11, color: '#8a6000' }}>Pending</span>
-                            : <span style={{ fontSize: 11, color: '#aaa' }}>—</span>}
+                      <td style={TD} onClick={e => e.stopPropagation()}>
+                        {req.signedOffBy ? (
+                          <div style={{ fontSize: 11, color: '#107c10' }}>✓ {req.signedOffBy}</div>
+                        ) : req.requestStatus === 'Complete' ? (
+                          isAdmin && signOffId === req.id ? (
+                            <div>
+                              <input
+                                type="text"
+                                value={signOffName}
+                                onChange={e => setSignOffName(e.target.value)}
+                                placeholder="Your name"
+                                autoFocus
+                                style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }}
+                              />
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button
+                                  disabled={!signOffName.trim() || savingId === req.id}
+                                  onClick={() => handleSignOff(req.id!).catch(() => undefined)}
+                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                                  {savingId === req.id ? '…' : '✓ Confirm'}
+                                </button>
+                                <button
+                                  onClick={() => { setSignOffId(null); setSignOffName(''); }}
+                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : isAdmin ? (
+                            <button
+                              onClick={() => { setSignOffId(req.id!); setSignOffName(''); }}
+                              style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                              Sign Off
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#8a6000' }}>Pending</span>
+                          )
+                        ) : (
+                          <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
+                        )}
                       </td>
                       {isAdmin && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
                         {req.requestStatus === 'Pending' && (
