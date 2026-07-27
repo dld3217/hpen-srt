@@ -5,7 +5,7 @@ import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService } from '../../../services/ConfigService';
-import { ICseRequest, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
+import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.29';
+const VERSION = '1.0.30';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -234,6 +234,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setCancelId(null); setCancelReason(''); setCancelNote('');
       setExpandedId(null); setDateEdit(null);
     } finally { setSavingDates(false); }
+  };
+
+  const handleStatusChange = async (id: number, status: CseRequestStatus): Promise<void> => {
+    try {
+      await new CseRequestService(sp).updateStatus(id, status);
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, requestStatus: status } : r));
+    } catch { /* ignore */ }
   };
 
   const handleCustTemp = async (id: number, temp: string): Promise<void> => {
@@ -558,11 +565,23 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                           {req.csePriority || '—'}
                         </span>
                       </td>
-                      <td style={TD}>
-                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                          background: statusStyle.bg, color: statusStyle.color }}>
-                          {req.requestStatus}
-                        </span>
+                      <td style={TD} onClick={e => e.stopPropagation()}>
+                        {isAdmin ? (
+                          <select
+                            value={req.requestStatus}
+                            onChange={e => handleStatusChange(req.id!, e.target.value as CseRequestStatus).catch(() => undefined)}
+                            style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                              background: statusStyle.bg, color: statusStyle.color,
+                              border: 'none', cursor: 'pointer' }}>
+                            {(['Pending','Accepted','Scheduled','In Progress','Complete','Declined','Needs Info','Cancelled'] as CseRequestStatus[])
+                              .map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                        ) : (
+                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                            background: statusStyle.bg, color: statusStyle.color }}>
+                            {req.requestStatus}
+                          </span>
+                        )}
                       </td>
                       <td style={TD}>
                         <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
