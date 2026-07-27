@@ -60,7 +60,7 @@ const EMPTY_FORM: ISseFormData = {
   opportunityAmount: 0,
 };
 
-const VERSION = '1.0.27';
+const VERSION = '1.0.28';
 
 const greeting = (): string => {
   const h = new Date().getHours();

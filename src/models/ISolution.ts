@@ -33,6 +33,7 @@ export const SOLUTIONS: ISolutionDef[] = [
   { code: 'NSCP', name: 'NAC ClearPass',               category: 'NAC' },
   { code: 'NSCN', name: 'NAC Central NAC',             category: 'NAC' },
   { code: 'AUXI', name: 'UXI (User Experience Insights)', category: 'AIOps' },
+  { code: 'PW5G', name: 'Private 5G',                  category: 'Private Wireless' },
   { code: 'UD1',  name: 'User Defined 1',              category: 'User Defined' },
   { code: 'UD2',  name: 'User Defined 2',              category: 'User Defined' },
   { code: 'UD3',  name: 'User Defined 3',              category: 'User Defined' },
