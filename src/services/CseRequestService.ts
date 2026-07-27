@@ -13,7 +13,7 @@ const SP_SELECT = [
   'OnsiteTBD', 'OnsiteStart', 'OnsiteEnd', 'OnsiteDuration', 'OnsiteDestination',
   'SEPrimary', 'SEMPrimary', 'SEDEmail', 'BURegion', 'HPENBusinessUnit',
   'CustomerName', 'POCName', 'OpportunityAmount',
-  'CustTemp', 'SignedOffBy', 'SignOffDate', 'Notes',
+  'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'Modified',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,7 +62,9 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     custTemp: (item.CustTemp || 'Normal') as CustTemp,
     signedOffBy: item.SignedOffBy || '',
     signOffDate: item.SignOffDate || '',
+    opportunity: item.Opportunity || '',
     notes: item.Notes || '',
+    modified: item.Modified || '',
   };
 }
 
@@ -198,5 +200,12 @@ export class CseRequestService {
 
   async updateSolutions(id: number, solutionsFocus: string): Promise<void> {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ SolutionsFocus: solutionsFocus });
+  }
+
+  async updateOpportunityAndNotes(id: number, opportunity: string, notes: string): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
+      Opportunity: opportunity,
+      Notes: notes,
+    });
   }
 }

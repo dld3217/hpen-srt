@@ -36,7 +36,9 @@ export interface ICseRequest {
   custTemp: CustTemp;
   signedOffBy: string;
   signOffDate: string;
+  opportunity?: string;
   notes: string;
+  modified?: string;
 }
 
 export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: string }> = {

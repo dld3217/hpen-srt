@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.30';
+const VERSION = '1.0.31';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -107,6 +107,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
   const [activeTile, setActiveTile]             = useState<string | null>(null);
+  const [drawerOpportunity, setDrawerOpportunity] = useState('');
+  const [drawerNotes, setDrawerNotes]             = useState('');
+  const [savingNotes, setSavingNotes]             = useState(false);
   const tableRef                                = useRef<HTMLDivElement>(null);
 
   const userEmail    = context.pageContext.user.email.toLowerCase();
@@ -163,6 +166,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setDateEdit(null);
       setDeclineDatesId(null);
       setDeclineDatesNote('');
+      setDrawerOpportunity('');
+      setDrawerNotes('');
     } else {
       setExpandedId(req.id!);
       setDateEdit({
@@ -176,9 +181,22 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         onsiteDuration:   req.onsiteDuration,
         onsiteDestination: req.onsiteDestination,
       });
+      setDrawerOpportunity(req.opportunity || '');
+      setDrawerNotes(req.notes || '');
       setDeclineDatesId(null);
       setDeclineDatesNote('');
     }
+  };
+
+  const handleSaveNotes = async (id: number): Promise<void> => {
+    setSavingNotes(true);
+    try {
+      await new CseRequestService(sp).updateOpportunityAndNotes(id, drawerOpportunity, drawerNotes);
+      setRequests(prev => prev.map(r => r.id === id
+        ? { ...r, opportunity: drawerOpportunity, notes: drawerNotes }
+        : r
+      ));
+    } finally { setSavingNotes(false); }
   };
 
   const handleSaveDates = async (req: ICseRequest): Promise<void> => {
@@ -471,6 +489,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   <th style={TH}>Schedule</th>
                   <th style={TH}>Temp</th>
                   <th style={TH}>Sign-off</th>
+                  <th style={TH}>Updated</th>
                   {isAdmin && <th style={TH}>Actions</th>}
                 </tr>
               </thead>
@@ -485,7 +504,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail))
                                         && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
                   const showDateActions = isAdmin && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
-                  const colSpan       = isAdmin ? 11 : 10;
+                  const colSpan       = isAdmin ? 12 : 11;
                   const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
                   return (
                     <React.Fragment key={req.id ?? i}>
@@ -657,6 +676,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                           <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
                         )}
                       </td>
+                      <td style={{ ...TD, fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>
+                        {fmtDate(req.modified || '') || '—'}
+                      </td>
                       {isAdmin && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
                         {req.requestStatus === 'Pending' && (
                           decliningId === req.id ? (
@@ -822,6 +844,38 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                                 </div>
                               )}
                             </div>
+                          </div>
+
+                          {/* Opportunity + Notes */}
+                          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Opportunity</div>
+                              <textarea
+                                value={drawerOpportunity}
+                                onChange={e => setDrawerOpportunity(e.target.value)}
+                                rows={4}
+                                placeholder="Background, context, or opportunity details…"
+                                style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
+                              />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Notes</div>
+                              <textarea
+                                value={drawerNotes}
+                                onChange={e => setDrawerNotes(e.target.value)}
+                                rows={4}
+                                placeholder="Running notes, date-tagged updates…"
+                                style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
+                              />
+                            </div>
+                          </div>
+                          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                              disabled={savingNotes}
+                              onClick={() => handleSaveNotes(req.id!).catch(() => undefined)}
+                              style={{ padding: '5px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingNotes ? 0.6 : 1 }}>
+                              {savingNotes ? 'Saving…' : 'Save Notes'}
+                            </button>
                           </div>
 
                           {/* Action bar */}
