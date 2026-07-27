@@ -17,6 +17,16 @@ const SP_SELECT = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function unwrapChoice(val: unknown): string {
+  if (!val) return '';
+  if (typeof val === 'object' && val !== null && 'Value' in val) return (val as Record<string, string>).Value || '';
+  if (typeof val === 'string' && val.startsWith('{')) {
+    try { const p = JSON.parse(val); return p.Value || val; } catch { /* not JSON */ }
+  }
+  return String(val);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapToRequest(item: Record<string, any>): ICseRequest {
   return {
     id: item.Id,
@@ -28,7 +38,7 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     requestedCse: item.RequestedCSE || '',
     sseManagerEmail: item.SSEManagerEmail || '',
     cseDescription: item.CSEDescription || '',
-    csePriority: item.CSEPriority || '',
+    csePriority: unwrapChoice(item.CSEPriority),
     csePriorityReason: item.CSEPriorityReason || '',
     solutionsFocus: item.SolutionsFocus || '',
     supportType: item.SupportType || '',
@@ -44,8 +54,8 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     sePrimary: item.SEPrimary || '',
     semPrimary: item.SEMPrimary || '',
     sedEmail: item.SEDEmail || '',
-    buRegion: item.BURegion || '',
-    hpenBusinessUnit: item.HPENBusinessUnit || '',
+    buRegion: unwrapChoice(item.BURegion),
+    hpenBusinessUnit: unwrapChoice(item.HPENBusinessUnit),
     customerName: item.CustomerName || '',
     pocName: item.POCName || '',
     opportunityAmount: item.OpportunityAmount || 0,
