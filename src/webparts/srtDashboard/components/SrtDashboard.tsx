@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.28';
+const VERSION = '1.0.29';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -106,6 +106,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterSearch, setFilterSearch]         = useState('');
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
+  const [activeTile, setActiveTile]             = useState<string | null>(null);
+  const tableRef                                = useRef<HTMLDivElement>(null);
 
   const userEmail    = context.pageContext.user.email.toLowerCase();
   const displayName  = context.pageContext.user.displayName || userEmail;
@@ -253,6 +255,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } catch { /* ignore */ }
   };
 
+  const handleTileClick = (label: string): void => {
+    const next = activeTile === label ? null : label;
+    setActiveTile(next);
+    if (next !== null) {
+      setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    }
+  };
+
   const handleSignOff = async (id: number): Promise<void> => {
     if (!signOffName.trim()) return;
     setSavingId(id);
@@ -288,7 +298,17 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const buOptions     = Array.from(new Set(visibleRequests.map(r => r.hpenBusinessUnit).filter(Boolean))).sort();
   const regionOptions = Array.from(new Set(visibleRequests.map(r => r.buRegion).filter(Boolean))).sort();
 
-  const filteredRequests = visibleRequests.filter(r => {
+  const tileFiltered = (() => {
+    if (!activeTile) return visibleRequests;
+    if (activeTile === 'Pending')        return visibleRequests.filter(r => r.requestStatus === 'Pending');
+    if (activeTile === 'Needs Info')     return visibleRequests.filter(r => r.requestStatus === 'Needs Info');
+    if (activeTile === 'Active')         return visibleRequests.filter(r => ['Accepted', 'Scheduled', 'In Progress'].includes(r.requestStatus));
+    if (activeTile === 'Complete')       return visibleRequests.filter(r => r.requestStatus === 'Complete');
+    if (activeTile === 'Needs Sign-off') return visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy);
+    return visibleRequests;
+  })();
+
+  const filteredRequests = tileFiltered.filter(r => {
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
@@ -355,18 +375,36 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           { label: 'Active',         count: active.length,        bg: '#eff6fc', color: '#0078d4' },
           { label: 'Complete',       count: complete.length,      bg: '#e8faf3', color: '#107c10' },
           { label: 'Needs Sign-off', count: needsSignOff.length,  bg: '#fff4ce', color: '#8a6000' },
-        ].map(tile => (
-          <div key={tile.label} style={{ background: tile.bg, borderRadius: 6, padding: '12px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: tile.color }}>{tile.count}</div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: tile.color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{tile.label}</div>
-          </div>
-        ))}
+        ].map(tile => {
+          const isActive = activeTile === tile.label;
+          return (
+            <div key={tile.label}
+              onClick={() => handleTileClick(tile.label)}
+              title={isActive ? `Click to clear ${tile.label} filter` : `Click to filter by ${tile.label}`}
+              style={{
+                background: isActive ? tile.color : tile.bg,
+                borderRadius: 6,
+                padding: '12px 16px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                border: `2px solid ${isActive ? tile.color : 'transparent'}`,
+                boxShadow: isActive ? `0 2px 10px ${tile.color}55` : 'none',
+                transition: 'background 0.15s, box-shadow 0.15s',
+                userSelect: 'none' as const,
+              }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: isActive ? '#fff' : tile.color }}>{tile.count}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: isActive ? '#fff' : tile.color, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                {tile.label}{isActive ? ' ✕' : ''}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Request table */}
-      <div style={{ padding: '16px 20px' }}>
+      <div ref={tableRef} style={{ padding: '16px 20px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 6 }}>
-          {isAdmin ? 'All Requests' : 'My Requests'} ({filteredRequests.length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
+          {activeTile ? activeTile : isAdmin ? 'All Requests' : 'My Requests'} ({filteredRequests.length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
         </div>
 
         {/* Filter bar */}
@@ -399,8 +437,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <option value="All">All Priority</option>
             {['Low','Medium','High','Critical'].map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {(filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterSearch) && (
-            <button onClick={() => { setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterSearch(''); }}
+          {(activeTile || filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterSearch) && (
+            <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
             </button>
