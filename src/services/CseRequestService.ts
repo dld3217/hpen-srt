@@ -195,4 +195,8 @@ export class CseRequestService {
       RequestStatus: 'Complete',
     });
   }
+
+  async updateSolutions(id: number, solutionsFocus: string): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ SolutionsFocus: solutionsFocus });
+  }
 }

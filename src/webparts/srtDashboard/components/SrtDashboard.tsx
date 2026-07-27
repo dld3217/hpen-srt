@@ -6,7 +6,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService } from '../../../services/ConfigService';
 import { ICseRequest, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
-import { SOLUTIONS } from '../../../models/ISolution';
+import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
 
@@ -62,7 +62,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.25';
+const VERSION = '1.0.26';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -98,6 +98,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterRegion, setFilterRegion]         = useState('All');
   const [filterPriority, setFilterPriority]     = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
+  const [editSolId, setEditSolId]               = useState<number | null>(null);
+  const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
 
   const userEmail    = context.pageContext.user.email.toLowerCase();
   const displayName  = context.pageContext.user.displayName || userEmail;
@@ -232,6 +234,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     try {
       await new CseRequestService(sp).updateCustTemp(id, t);
       setRequests(prev => prev.map(r => r.id === id ? { ...r, custTemp: t } : r));
+    } catch { /* ignore */ }
+  };
+
+  const handleSolutionSave = async (id: number): Promise<void> => {
+    const codes = Array.from(editSolCodes).join(',');
+    try {
+      await new CseRequestService(sp).updateSolutions(id, codes);
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, solutionsFocus: codes } : r));
+      setEditSolId(null);
+      setEditSolCodes(new Set());
     } catch { /* ignore */ }
   };
 
@@ -445,8 +457,49 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                         <div>{req.hpenBusinessUnit}</div>
                         <div style={{ fontSize: 11, color: '#888' }}>{req.buRegion}</div>
                       </td>
-                      <td style={{ ...TD, fontSize: 11, maxWidth: 140 }}>
-                        {codeToName(req.solutionsFocus)}
+                      <td style={{ ...TD, fontSize: 11, maxWidth: 160 }} onClick={e => e.stopPropagation()}>
+                        {isAdmin && editSolId === req.id ? (
+                          <div>
+                            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 4, padding: '4px 6px', background: '#fff', marginBottom: 6 }}>
+                              {SOLUTION_CATEGORIES.map((cat, ci) => (
+                                <div key={cat}>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', padding: `${ci === 0 ? 2 : 6}px 0 2px`, borderTop: ci === 0 ? 'none' : '1px solid #f0f0f0' }}>{cat}</div>
+                                  {SOLUTIONS.filter(s => s.category === cat).map(s => (
+                                    <label key={s.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', padding: '2px 0' }}>
+                                      <input type="checkbox" checked={editSolCodes.has(s.code)}
+                                        onChange={ev => {
+                                          const next = new Set(editSolCodes);
+                                          if (ev.target.checked) next.add(s.code); else next.delete(s.code);
+                                          setEditSolCodes(next);
+                                        }} />
+                                      {s.name}
+                                    </label>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button onClick={() => handleSolutionSave(req.id!).catch(() => undefined)}
+                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                                Save
+                              </button>
+                              <button onClick={() => { setEditSolId(null); setEditSolCodes(new Set()); }}
+                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span
+                            onClick={isAdmin ? () => {
+                              setEditSolId(req.id!);
+                              setEditSolCodes(new Set(req.solutionsFocus ? req.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : []));
+                            } : undefined}
+                            style={{ cursor: isAdmin ? 'pointer' : 'default', textDecoration: isAdmin ? 'underline dotted' : 'none' }}
+                            title={isAdmin ? 'Click to edit solutions' : undefined}>
+                            {codeToName(req.solutionsFocus)}
+                          </span>
+                        )}
                       </td>
                       <td style={TD}>
                         <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
