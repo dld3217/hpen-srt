@@ -92,6 +92,19 @@ export class ConfigService {
     }
   }
 
+  public async saveBURegions(buRegions: BURegionMap): Promise<void> {
+    const items: { Id: number }[] = await this._sp.web.lists
+      .getByTitle('AppConfig').items
+      .filter("Title eq 'BURegions'").select('Id')();
+    if (items.length > 0) {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .getById(items[0].Id).update({ Value: JSON.stringify(buRegions) });
+    } else {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .add({ Title: 'BURegions', Value: JSON.stringify(buRegions) });
+    }
+  }
+
   public async getBURegions(): Promise<BURegionMap> {
     try {
       const items: { Value: string }[] = await this._sp.web.lists
