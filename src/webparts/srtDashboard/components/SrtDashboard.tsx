@@ -10,6 +10,12 @@ import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
 
+const emailToName = (email: string): string => {
+  if (!email) return '';
+  const local = email.split('@')[0];
+  return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+};
+
 const codeToName = (codes: string): string => {
   if (!codes) return '—';
   return codes.split(',').map(c => {
@@ -62,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.26';
+const VERSION = '1.0.27';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -412,7 +418,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 <tr style={{ background: HPE_NAVY, color: '#fff' }}>
                   <th style={TH}>Customer</th>
                   <th style={TH}>SE</th>
-                  <th style={TH}>SSE</th>
+                  <th style={TH}>SSE / SED</th>
                   <th style={TH}>BU / Region</th>
                   <th style={TH}>Solutions</th>
                   <th style={TH}>Priority</th>
@@ -452,14 +458,26 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                       <td style={{ ...TD, fontSize: 12, opacity: isCancelled ? 0.6 : 1 }}>
                         {parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || '—'}
                       </td>
-                      <td style={TD}>{sseName || '—'}</td>
+                      <td style={TD}>
+                        <div>{sseName || '—'}</div>
+                        {req.sedEmail && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{emailToName(req.sedEmail)}</div>}
+                      </td>
                       <td style={TD}>
                         <div>{req.hpenBusinessUnit}</div>
                         <div style={{ fontSize: 11, color: '#888' }}>{req.buRegion}</div>
                       </td>
-                      <td style={{ ...TD, fontSize: 11, maxWidth: 160 }} onClick={e => e.stopPropagation()}>
+                      <td
+                        style={{ ...TD, fontSize: 11, maxWidth: 160, cursor: isAdmin && editSolId !== req.id ? 'pointer' : 'default' }}
+                        title={isAdmin && editSolId !== req.id ? 'Click to edit solutions' : undefined}
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (isAdmin && editSolId !== req.id) {
+                            setEditSolId(req.id!);
+                            setEditSolCodes(new Set(req.solutionsFocus ? req.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : []));
+                          }
+                        }}>
                         {isAdmin && editSolId === req.id ? (
-                          <div>
+                          <div onClick={e => e.stopPropagation()}>
                             <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 4, padding: '4px 6px', background: '#fff', marginBottom: 6 }}>
                               {SOLUTION_CATEGORIES.map((cat, ci) => (
                                 <div key={cat}>
@@ -490,13 +508,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                             </div>
                           </div>
                         ) : (
-                          <span
-                            onClick={isAdmin ? () => {
-                              setEditSolId(req.id!);
-                              setEditSolCodes(new Set(req.solutionsFocus ? req.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : []));
-                            } : undefined}
-                            style={{ cursor: isAdmin ? 'pointer' : 'default', textDecoration: isAdmin ? 'underline dotted' : 'none' }}
-                            title={isAdmin ? 'Click to edit solutions' : undefined}>
+                          <span style={{ textDecoration: isAdmin ? 'underline dotted' : 'none' }}>
                             {codeToName(req.solutionsFocus)}
                           </span>
                         )}

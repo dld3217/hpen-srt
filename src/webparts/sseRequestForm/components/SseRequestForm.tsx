@@ -60,7 +60,7 @@ const EMPTY_FORM: ISseFormData = {
   opportunityAmount: 0,
 };
 
-const VERSION = '1.0.25';
+const VERSION = '1.0.27';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -75,6 +75,12 @@ const firstName = (displayName: string): string => {
   if (displayName.includes(',')) return displayName.split(',')[1].trim().split(' ')[0];
   // Handle "First Last" standard format
   return displayName.split(' ')[0];
+};
+
+const emailToName = (email: string): string => {
+  if (!email) return '';
+  const local = email.split('@')[0];
+  return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -425,7 +431,9 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   const regionKeys = formData.hpenBusinessUnit
     ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort()
     : [];
-  const focusCodes = formData.solutionsFocus ? formData.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const focusCodes        = formData.solutionsFocus ? formData.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const activeBuConfig    = formData.hpenBusinessUnit ? (buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined) : undefined;
+  const reviewingSedEmail = activeBuConfig?.sedEmail || '';
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -435,7 +443,8 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
         <div style={{ fontSize: 22, fontWeight: 700, color: HPE_NAVY, marginBottom: 8 }}>Request Sent</div>
         <div style={{ fontSize: 14, color: '#605e5c', marginBottom: 24 }}>
-          Your SSE support request for <strong>{formData.customerName}</strong> has been submitted. The SSE team will be notified shortly.
+          Your SSE support request for <strong>{formData.customerName}</strong> has been submitted.
+          Your SED/GM will review it and assign the SSE — typically within 24 hours.
         </div>
         <button
           onClick={() => { setFormData(EMPTY_FORM); setSubmitted(false); }}
@@ -556,6 +565,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       {/* Section 2 — SSE Selection */}
       <div style={SECTION}>
         <div style={SECTION_TITLE}>SSE Selection</div>
+        {reviewingSedEmail && (
+          <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
+            <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
+          </div>
+        )}
         <PeoplePickerField
           label="Requested SSE"
           required
@@ -652,9 +666,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           {submitting ? 'Sending…' : '✉ Send SSE Request'}
         </button>
         <span style={{ fontSize: 12, color: '#605e5c' }}>
-          Sends email to SEM, SED &amp; SSE
-          {formData.supportType && !formData.remoteTbd && formData.remoteStart ? ' + calendar invite attached' :
-           formData.supportType && !formData.onsiteTbd && formData.onsiteStart ? ' + calendar invite attached' : ''}
+          Notifies your SED/GM for review — SSE assigned after approval
         </span>
       </div>
 
