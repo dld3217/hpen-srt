@@ -16,7 +16,6 @@ export interface ISseRequestFormProps {
 
 interface ISseFormData {
   customerName: string;
-  pocName: string;
   hpenBusinessUnit: string;
   buRegion: string;
   requestedSse: string;
@@ -31,7 +30,8 @@ interface ISseFormData {
   onsiteEnd: string;
   onsiteDuration: string;
   onsiteDestination: string;
-  cseDescription: string;
+  opportunity: string;
+  notes: string;
   csePriority: string;
   csePriorityReason: string;
   opportunityAmount: number;
@@ -39,7 +39,6 @@ interface ISseFormData {
 
 const EMPTY_FORM: ISseFormData = {
   customerName: '',
-  pocName: '',
   hpenBusinessUnit: '',
   buRegion: '',
   requestedSse: '',
@@ -54,13 +53,14 @@ const EMPTY_FORM: ISseFormData = {
   onsiteEnd: '',
   onsiteDuration: '',
   onsiteDestination: '',
-  cseDescription: '',
+  opportunity: '',
+  notes: '',
   csePriority: '',
   csePriorityReason: '',
   opportunityAmount: 0,
 };
 
-const VERSION = '1.0.28';
+const VERSION = '1.0.29';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -365,7 +365,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     if (!formData.requestedSse.includes('/')) errs.push('Requested SSE is required — search and select a person.');
     if (!formData.supportType)            errs.push('Support Type is required.');
     if (!formData.csePriority)            errs.push('Priority is required.');
-    if (!formData.cseDescription.trim())  errs.push('Description of Need is required.');
+    if (!formData.notes.trim())           errs.push('Notes is required.');
     return errs;
   };
 
@@ -391,7 +391,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         scheduleStatus: (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' : 'Dates Proposed',
         requestedCse: formData.requestedSse,
         sseManagerEmail: '',
-        cseDescription: formData.cseDescription,
+        cseDescription: formData.notes,
         csePriority: formData.csePriority,
         csePriorityReason: formData.csePriorityReason,
         solutionsFocus: formData.solutionsFocus,
@@ -411,12 +411,13 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         buRegion: formData.buRegion,
         hpenBusinessUnit: formData.hpenBusinessUnit,
         customerName: formData.customerName,
-        pocName: formData.pocName,
+        pocName: '',
         opportunityAmount: formData.opportunityAmount,
         custTemp: 'Normal',
         signedOffBy: '',
         signOffDate: '',
-        notes: '',
+        opportunity: formData.opportunity,
+        notes: formData.notes,
       });
 
       setSubmitted(true);
@@ -497,19 +498,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       <div style={SECTION}>
         <div style={SECTION_TITLE}>Request Info</div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div style={FIELD_ROW}>
-            <label style={LABEL_STYLE}>Customer Name <span style={{ color: '#d13438' }}>*</span></label>
-            <input type="text" value={formData.customerName}
-              onChange={e => set('customerName', e.target.value)}
-              placeholder="e.g. Acme Corp" style={INPUT} />
-          </div>
-          <div style={FIELD_ROW}>
-            <label style={LABEL_STYLE}>POC / Opportunity Name</label>
-            <input type="text" value={formData.pocName}
-              onChange={e => set('pocName', e.target.value)}
-              placeholder="Optional" style={INPUT} />
-          </div>
+        <div style={FIELD_ROW}>
+          <label style={LABEL_STYLE}>Customer Name <span style={{ color: '#d13438' }}>*</span></label>
+          <input type="text" value={formData.customerName}
+            onChange={e => set('customerName', e.target.value)}
+            placeholder="e.g. Acme Corp" style={INPUT} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -615,6 +608,14 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         <div style={SECTION_TITLE}>Support Details</div>
 
         <div style={FIELD_ROW}>
+          <label style={LABEL_STYLE}>Opportunity</label>
+          <textarea rows={2} value={formData.opportunity}
+            onChange={e => set('opportunity', e.target.value)}
+            placeholder="e.g. Upgrade WLAN, new campus deployment, competitive displacement…"
+            style={{ ...INPUT, resize: 'vertical' }} />
+        </div>
+
+        <div style={FIELD_ROW}>
           <label style={LABEL_STYLE}>Support Type <span style={{ color: '#d13438' }}>*</span></label>
           <div style={{ display: 'flex', gap: 6 }}>
             {(['Remote', 'On-Site', 'Both'] as const).map(t => (
@@ -626,10 +627,10 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         </div>
 
         <div style={FIELD_ROW}>
-          <label style={LABEL_STYLE}>Description of Need & Skill Set Required <span style={{ color: '#d13438' }}>*</span></label>
-          <textarea rows={4} value={formData.cseDescription}
-            onChange={e => set('cseDescription', e.target.value)}
-            placeholder="Describe what SSE help is needed and the required skill set..."
+          <label style={LABEL_STYLE}>Notes <span style={{ color: '#d13438' }}>*</span></label>
+          <textarea rows={4} value={formData.notes}
+            onChange={e => set('notes', e.target.value)}
+            placeholder="Describe what SSE help is needed, required skill set, and any relevant context…"
             style={{ ...INPUT, resize: 'vertical' }} />
         </div>
 
