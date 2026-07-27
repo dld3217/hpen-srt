@@ -40,7 +40,7 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     cseDescription: item.CSEDescription || '',
     csePriority: unwrapChoice(item.CSEPriority),
     csePriorityReason: item.CSEPriorityReason || '',
-    solutionsFocus: item.SolutionsFocus || '',
+    solutionsFocus: unwrapChoice(item.SolutionsFocus),
     supportType: item.SupportType || '',
     remoteTbd: !!item.RemoteTBD,
     remoteStart: item.RemoteStart || '',

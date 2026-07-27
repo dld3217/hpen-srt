@@ -62,7 +62,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.24';
+const VERSION = '1.0.25';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -301,6 +301,19 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
+          <a href="https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SSE-Request-Form.aspx"
+            target="_blank" rel="noreferrer"
+            style={{ padding: '4px 14px', background: HPE_GREEN, border: 'none', borderRadius: 4,
+              color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
+            + New Request
+          </a>
+          <a href="https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/Home.aspx"
+            target="_blank" rel="noreferrer"
+            style={{ padding: '4px 14px', background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.35)', borderRadius: 4,
+              color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
+            POC Manager
+          </a>
           {isAdmin && (
             <button
               onClick={() => setShowAdmin(true)}
