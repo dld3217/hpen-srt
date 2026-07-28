@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.33';
+const VERSION = '1.0.34';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -523,7 +523,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   const isCancelled   = req.requestStatus === 'Cancelled';
                   const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail))
                                         && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
-                  const showDateActions = isAdmin && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
+                  const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
+                  const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
                   const colSpan       = isAdmin ? 12 : 11;
                   const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
                   return (
