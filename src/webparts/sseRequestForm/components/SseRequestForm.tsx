@@ -72,7 +72,7 @@ const EMPTY_FORM: ISseFormData = {
   additionalSpecialty2: '',
 };
 
-const VERSION = '1.0.34';
+const VERSION = '1.0.35';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -665,7 +665,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
             {/* Additional SSE 1 */}
             <div style={{ padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #1</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #2</div>
               {sseTeams.length > 0 && (
                 <div style={FIELD_ROW}>
                   <label style={LABEL_STYLE}>Specialty Type</label>
@@ -703,7 +703,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
             {/* Additional SSE 2 */}
             <div style={{ padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #2</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #3</div>
               {sseTeams.length > 0 && (
                 <div style={FIELD_ROW}>
                   <label style={LABEL_STYLE}>Specialty Type</label>
