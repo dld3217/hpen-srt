@@ -60,7 +60,7 @@ const EMPTY_FORM: ISseFormData = {
   opportunityAmount: 0,
 };
 
-const VERSION = '1.0.29';
+const VERSION = '1.0.30';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -652,6 +652,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         {(formData.supportType === 'On-Site' || formData.supportType === 'Both') && (
           <ScheduleBlock
             label="On-Site Schedule"
+            dateOnly
             tbd={formData.onsiteTbd}
             start={formData.onsiteStart}
             end={formData.onsiteEnd}
