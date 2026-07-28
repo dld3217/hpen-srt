@@ -39,6 +39,8 @@ interface ISseFormData {
   additionalResourceNeeded: boolean;
   additionalSse: string;
   additionalSpecialty: string;
+  additionalSse2: string;
+  additionalSpecialty2: string;
 }
 
 const EMPTY_FORM: ISseFormData = {
@@ -66,9 +68,11 @@ const EMPTY_FORM: ISseFormData = {
   additionalResourceNeeded: false,
   additionalSse: '',
   additionalSpecialty: '',
+  additionalSse2: '',
+  additionalSpecialty2: '',
 };
 
-const VERSION = '1.0.31';
+const VERSION = '1.0.32';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -445,6 +449,17 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         });
       }
 
+      if (formData.additionalResourceNeeded && formData.additionalSse2.includes('/')) {
+        const addlTeam2 = sseTeams.find(t => t.name === formData.additionalSpecialty2);
+        await svc.create({
+          ...basePayload,
+          title: `${formData.customerName} — SSE Request (Additional Resource 2)`,
+          requestedCse: formData.additionalSse2,
+          sseManagerEmail: addlTeam2?.managerEmail || '',
+          specialtyType: formData.additionalSpecialty2,
+        });
+      }
+
       setSubmitted(true);
     } catch (err) {
       setSubmitError(`Submit failed: ${(err as Error)?.message || String(err)}`);
@@ -647,36 +662,84 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         </div>
 
         {formData.additionalResourceNeeded && (
-          <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE</div>
-            {sseTeams.length > 0 && (
-              <div style={FIELD_ROW}>
-                <label style={LABEL_STYLE}>Specialty Type</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {sseTeams.map(team => {
-                    const active = formData.additionalSpecialty === team.name;
-                    return (
-                      <button key={team.name} type="button"
-                        onClick={() => set('additionalSpecialty', active ? '' : team.name)}
-                        style={{
-                          padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                          background: active ? HPE_NAVY : '#f3f2f1',
-                          color: active ? '#fff' : '#323130',
-                          border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
-                        }}>
-                        {team.name}
-                      </button>
-                    );
-                  })}
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            {/* Additional SSE 1 */}
+            <div style={{ padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #1</div>
+              {sseTeams.length > 0 && (
+                <div style={FIELD_ROW}>
+                  <label style={LABEL_STYLE}>Specialty Type</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {sseTeams.map(team => {
+                      const active = formData.additionalSpecialty === team.name;
+                      return (
+                        <button key={team.name} type="button"
+                          onClick={() => set('additionalSpecialty', active ? '' : team.name)}
+                          style={{
+                            padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
+                            background: active ? HPE_NAVY : '#f3f2f1',
+                            color: active ? '#fff' : '#323130',
+                            border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
+                          }}>
+                          {team.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty); return t?.managerEmail ? (
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#605e5c' }}>
+                      Manager: <strong>{emailToName(t.managerEmail)}</strong> will be notified when accepted.
+                    </div>
+                  ) : null; })()}
                 </div>
-              </div>
-            )}
-            <PeoplePickerField
-              label="Additional SSE"
-              value={formData.additionalSse}
-              onChange={v => set('additionalSse', v)}
-              searchUsers={handleSearchUsers}
-            />
+              )}
+              <PeoplePickerField
+                label="Additional SSE"
+                value={formData.additionalSse}
+                onChange={v => set('additionalSse', v)}
+                searchUsers={handleSearchUsers}
+              />
+            </div>
+
+            {/* Additional SSE 2 */}
+            <div style={{ padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #2</div>
+              {sseTeams.length > 0 && (
+                <div style={FIELD_ROW}>
+                  <label style={LABEL_STYLE}>Specialty Type</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {sseTeams.map(team => {
+                      const active = formData.additionalSpecialty2 === team.name;
+                      return (
+                        <button key={team.name} type="button"
+                          onClick={() => set('additionalSpecialty2', active ? '' : team.name)}
+                          style={{
+                            padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
+                            background: active ? HPE_NAVY : '#f3f2f1',
+                            color: active ? '#fff' : '#323130',
+                            border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
+                          }}>
+                          {team.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty2); return t?.managerEmail ? (
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#605e5c' }}>
+                      Manager: <strong>{emailToName(t.managerEmail)}</strong> will be notified when accepted.
+                    </div>
+                  ) : null; })()}
+                </div>
+              )}
+              <PeoplePickerField
+                label="Additional SSE"
+                value={formData.additionalSse2}
+                onChange={v => set('additionalSse2', v)}
+                searchUsers={handleSearchUsers}
+              />
+            </div>
+
           </div>
         )}
       </div>
