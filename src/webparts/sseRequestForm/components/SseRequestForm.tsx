@@ -72,7 +72,7 @@ const EMPTY_FORM: ISseFormData = {
   additionalSpecialty2: '',
 };
 
-const VERSION = '1.0.33';
+const VERSION = '1.0.34';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -392,10 +392,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
     try {
       const buConfig       = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
-      const sedEmail       = buConfig?.sedEmail || '';
+      const buSedEmail     = buConfig?.sedEmail || '';
       const regionCfg      = buConfig?.regions[formData.buRegion] || {};
       const semEmail       = regionCfg.semEmail || '';
       const activeTeam     = sseTeams.find(t => t.name === formData.specialtyType);
+      const sedEmail       = activeTeam?.managerEmail || buSedEmail;
       const sseManagerEmail = activeTeam?.managerEmail || '';
       const schedStatus    = (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' as const : 'Dates Proposed' as const;
 
@@ -439,12 +440,13 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       await svc.create({ ...basePayload, title: `${formData.customerName} — SSE Request`, requestedCse: formData.requestedSse });
 
       if (formData.additionalResourceNeeded && formData.additionalSse.includes('/')) {
-        const addlTeam = sseTeams.find(t => t.name === formData.additionalSpecialty);
+        const addlTeam1 = sseTeams.find(t => t.name === formData.additionalSpecialty);
         await svc.create({
           ...basePayload,
           title: `${formData.customerName} — SSE Request (Additional Resource)`,
           requestedCse: formData.additionalSse,
-          sseManagerEmail: addlTeam?.managerEmail || '',
+          sedEmail: addlTeam1?.managerEmail || buSedEmail,
+          sseManagerEmail: addlTeam1?.managerEmail || '',
           specialtyType: formData.additionalSpecialty,
         });
       }
@@ -455,6 +457,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           ...basePayload,
           title: `${formData.customerName} — SSE Request (Additional Resource 2)`,
           requestedCse: formData.additionalSse2,
+          sedEmail: addlTeam2?.managerEmail || buSedEmail,
           sseManagerEmail: addlTeam2?.managerEmail || '',
           specialtyType: formData.additionalSpecialty2,
         });
@@ -477,6 +480,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   const reviewingSedEmail  = activeBuConfig?.sedEmail || '';
   const activeTeam         = sseTeams.find(t => t.name === formData.specialtyType);
   const activeTeamManager  = activeTeam?.managerEmail || '';
+  const effectiveSedEmail  = activeTeamManager || reviewingSedEmail;
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -630,17 +634,12 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
                 );
               })}
             </div>
-            {activeTeamManager && (
-              <div style={{ marginTop: 6, fontSize: 11, color: '#605e5c' }}>
-                Manager: <strong>{emailToName(activeTeamManager)}</strong> will be notified when this request is accepted.
-              </div>
-            )}
           </div>
         )}
 
-        {reviewingSedEmail && (
+        {effectiveSedEmail && (
           <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
-            <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
+            <strong>{emailToName(effectiveSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
           </div>
         )}
         <PeoplePickerField
@@ -687,18 +686,13 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
                       );
                     })}
                   </div>
-                  {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty); return t?.managerEmail ? (
-                    <div style={{ marginTop: 6, fontSize: 11, color: '#605e5c' }}>
-                      Manager: <strong>{emailToName(t.managerEmail)}</strong> will be notified when accepted.
-                    </div>
-                  ) : null; })()}
                 </div>
               )}
-              {reviewingSedEmail && (
+              {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty); const eff = t?.managerEmail || reviewingSedEmail; return eff ? (
                 <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
-                  <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
+                  <strong>{emailToName(eff)}</strong> (SED/GM) will review this request before the SSE is notified.
                 </div>
-              )}
+              ) : null; })()}
               <PeoplePickerField
                 label="Additional SSE"
                 value={formData.additionalSse}
@@ -730,18 +724,13 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
                       );
                     })}
                   </div>
-                  {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty2); return t?.managerEmail ? (
-                    <div style={{ marginTop: 6, fontSize: 11, color: '#605e5c' }}>
-                      Manager: <strong>{emailToName(t.managerEmail)}</strong> will be notified when accepted.
-                    </div>
-                  ) : null; })()}
                 </div>
               )}
-              {reviewingSedEmail && (
+              {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty2); const eff = t?.managerEmail || reviewingSedEmail; return eff ? (
                 <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
-                  <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
+                  <strong>{emailToName(eff)}</strong> (SED/GM) will review this request before the SSE is notified.
                 </div>
-              )}
+              ) : null; })()}
               <PeoplePickerField
                 label="Additional SSE"
                 value={formData.additionalSse2}
