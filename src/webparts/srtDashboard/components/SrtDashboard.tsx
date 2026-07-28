@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.32';
+const VERSION = '1.0.33';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -107,6 +107,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
   const [activeTile, setActiveTile]             = useState<string | null>(null);
+  const [sortField, setSortField]               = useState<'customer' | 'priority' | 'status'>('customer');
+  const [sortDir, setSortDir]                   = useState<'asc' | 'desc'>('asc');
   const [drawerOpportunity, setDrawerOpportunity] = useState('');
   const [drawerNotes, setDrawerNotes]             = useState('');
   const [savingNotes, setSavingNotes]             = useState(false);
@@ -340,6 +342,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (filterPriority !== 'All' && r.csePriority !== filterPriority) return false;
     if (filterSearch && !r.customerName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
     return true;
+  }).sort((a, b) => {
+    const PRIORITY_ORDER: Record<string, number> = { 'High': 0, 'Medium': 1, 'Low': 2, 'Critical': -1 };
+    const STATUS_ORDER: Record<string, number> = { 'Pending': 0, 'Needs Info': 1, 'Accepted': 2, 'Scheduled': 3, 'In Progress': 4, 'Complete': 5, 'Declined': 6, 'Cancelled': 7 };
+    let cmp = 0;
+    if (sortField === 'customer') cmp = a.customerName.localeCompare(b.customerName);
+    else if (sortField === 'priority') cmp = (PRIORITY_ORDER[a.csePriority] ?? 99) - (PRIORITY_ORDER[b.csePriority] ?? 99);
+    else if (sortField === 'status') cmp = (STATUS_ORDER[a.requestStatus] ?? 99) - (STATUS_ORDER[b.requestStatus] ?? 99);
+    return sortDir === 'asc' ? cmp : -cmp;
   });
 
   const pending      = visibleRequests.filter(r => r.requestStatus === 'Pending');
@@ -479,13 +489,23 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: HPE_NAVY, color: '#fff' }}>
-                  <th style={TH}>Customer</th>
+                  {(() => {
+                    const sortIcon = (field: 'customer' | 'priority' | 'status'): string =>
+                      sortField !== field ? ' ⇅' : sortDir === 'asc' ? ' ▲' : ' ▼';
+                    const handleSort = (field: 'customer' | 'priority' | 'status'): void => {
+                      if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                      else { setSortField(field); setSortDir('asc'); }
+                    };
+                    return (<>
+                  <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('customer')}>Customer{sortIcon('customer')}</th>
                   <th style={TH}>SE</th>
                   <th style={TH}>SSE / SED</th>
                   <th style={TH}>BU / Region</th>
                   <th style={TH}>Solutions</th>
-                  <th style={TH}>Priority</th>
-                  <th style={TH}>Status</th>
+                  <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('priority')}>Priority{sortIcon('priority')}</th>
+                  <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('status')}>Status{sortIcon('status')}</th>
+                    </>);
+                  })()}
                   <th style={TH}>Schedule</th>
                   <th style={TH}>Temp</th>
                   <th style={TH}>Sign-off</th>
