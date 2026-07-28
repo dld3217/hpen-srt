@@ -72,7 +72,7 @@ const EMPTY_FORM: ISseFormData = {
   additionalSpecialty2: '',
 };
 
-const VERSION = '1.0.32';
+const VERSION = '1.0.33';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -694,6 +694,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
                   ) : null; })()}
                 </div>
               )}
+              {reviewingSedEmail && (
+                <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
+                  <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
+                </div>
+              )}
               <PeoplePickerField
                 label="Additional SSE"
                 value={formData.additionalSse}
@@ -730,6 +735,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
                       Manager: <strong>{emailToName(t.managerEmail)}</strong> will be notified when accepted.
                     </div>
                   ) : null; })()}
+                </div>
+              )}
+              {reviewingSedEmail && (
+                <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
+                  <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
                 </div>
               )}
               <PeoplePickerField
