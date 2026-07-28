@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.34';
+const VERSION = '1.0.35';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -89,6 +89,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [declineNote, setDeclineNote]   = useState('');
   const [needsInfoId, setNeedsInfoId]           = useState<number | null>(null);
   const [needsInfoNote, setNeedsInfoNote]       = useState('');
+  const [reassignId, setReassignId]             = useState<number | null>(null);
+  const [reassignSse, setReassignSse]           = useState('');
   const [expandedId, setExpandedId]             = useState<number | null>(null);
   const [dateEdit, setDateEdit]                 = useState<IDateEdit | null>(null);
   const [savingDates, setSavingDates]           = useState(false);
@@ -133,6 +135,19 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     try {
       await new CseRequestService(sp).updateStatus(id, 'Accepted');
       setRequests(prev => prev.map(r => r.id === id ? { ...r, requestStatus: 'Accepted' } : r));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleReassignConfirm = async (id: number): Promise<void> => {
+    if (!reassignSse.includes('/')) return;
+    setSavingId(id);
+    try {
+      await new CseRequestService(sp).reassign(id, reassignSse.trim(), '');
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, requestedCse: reassignSse.trim(), requestStatus: 'Accepted' } : r));
+      setReassignId(null);
+      setReassignSse('');
     } finally {
       setSavingId(null);
     }
@@ -748,6 +763,31 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                                 </button>
                               </div>
                             </div>
+                          ) : reassignId === req.id ? (
+                            <div>
+                              <div style={{ fontSize: 10, color: '#605e5c', marginBottom: 3 }}>Enter new SSE as &ldquo;Name / email&rdquo;</div>
+                              <input
+                                type="text"
+                                value={reassignSse}
+                                onChange={e => setReassignSse(e.target.value)}
+                                placeholder="First Last / email@hpe.com"
+                                autoFocus
+                                style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }}
+                              />
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button
+                                  disabled={savingId === req.id || !reassignSse.includes('/')}
+                                  onClick={() => handleReassignConfirm(req.id!)}
+                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#0078d4', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                                  {savingId === req.id ? '…' : 'Reassign'}
+                                </button>
+                                <button
+                                  onClick={() => { setReassignId(null); setReassignSse(''); }}
+                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           ) : (
                             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                               <button
@@ -755,6 +795,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                                 onClick={() => handleAccept(req.id!)}
                                 style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
                                 {savingId === req.id ? '…' : '✓ Accept'}
+                              </button>
+                              <button
+                                onClick={() => { setReassignId(req.id!); setReassignSse(''); }}
+                                style={{ fontSize: 11, padding: '4px 10px', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                                ↔ Reassign
                               </button>
                               <button
                                 onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}

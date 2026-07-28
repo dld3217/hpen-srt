@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
-import { ConfigService, BURegionMap, IBUConfig } from '../../../services/ConfigService';
+import { ConfigService, BURegionMap, IBUConfig, ISSETeam } from '../../../services/ConfigService';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface ISrtAdminPanelProps {
@@ -22,7 +22,7 @@ const TAB_BTN = (active: boolean): React.CSSProperties => ({
 });
 
 export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onClose }) => {
-  const [tab, setTab]               = useState<'users' | 'bu'>('users');
+  const [tab, setTab]               = useState<'users' | 'bu' | 'teams'>('users');
   const [message, setMessage]       = useState('');
   const [msgType, setMsgType]       = useState<'ok' | 'err'>('ok');
 
@@ -31,6 +31,17 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
   const [newEmail, setNewEmail]     = useState('');
   const [usersLoading, setUsersLoading] = useState(true);
   const [saving, setSaving]         = useState(false);
+
+  // ── SSE Teams ────────────────────────────────────────────────────────────
+  const [sseTeams, setSseTeams]         = useState<ISSETeam[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(true);
+  const [teamsSaving, setTeamsSaving]   = useState(false);
+  const [editTeamIdx, setEditTeamIdx]   = useState<number | null>(null);
+  const [editTeamEmail, setEditTeamEmail] = useState('');
+  const [editTeamName, setEditTeamName] = useState('');
+  const [showAddTeam, setShowAddTeam]   = useState(false);
+  const [newTeamName, setNewTeamName]   = useState('');
+  const [newTeamEmail, setNewTeamEmail] = useState('');
 
   // ── BU Config ─────────────────────────────────────────────────────────────
   const [buRegions, setBuRegions]   = useState<BURegionMap>({});
@@ -63,6 +74,9 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
     configSvc.getBURegions()
       .then(b => { setBuRegions(b); setBuLoading(false); })
       .catch(() => setBuLoading(false));
+    configSvc.getSSETeams()
+      .then(t => { setSseTeams(t); setTeamsLoading(false); })
+      .catch(() => setTeamsLoading(false));
   }, []);
 
   // ── Super User actions ────────────────────────────────────────────────────
@@ -120,6 +134,38 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
     };
     saveBU(updated).catch(() => undefined);
     setNewBuName(''); setNewBuSed(''); setShowAddBu(false);
+  };
+
+  // ── SSE Teams actions ─────────────────────────────────────────────────────
+  const saveTeams = async (teams: ISSETeam[]): Promise<void> => {
+    setTeamsSaving(true);
+    try {
+      await configSvc.saveSSETeams(teams);
+      setSseTeams(teams);
+      showMsg('SSE Teams saved.', 'ok');
+    } catch (e) {
+      showMsg(`Save failed: ${(e as Error).message}`, 'err');
+    } finally { setTeamsSaving(false); }
+  };
+
+  const commitTeamEdit = (): void => {
+    if (editTeamIdx === null) return;
+    const updated = sseTeams.map((t, i) =>
+      i === editTeamIdx ? { name: editTeamName.trim() || t.name, managerEmail: editTeamEmail.trim().toLowerCase() } : t
+    );
+    saveTeams(updated).catch(() => undefined);
+    setEditTeamIdx(null);
+  };
+
+  const addTeam = (): void => {
+    const name = newTeamName.trim();
+    if (!name) return;
+    saveTeams([...sseTeams, { name, managerEmail: newTeamEmail.trim().toLowerCase() }]).catch(() => undefined);
+    setNewTeamName(''); setNewTeamEmail(''); setShowAddTeam(false);
+  };
+
+  const removeTeam = (idx: number): void => {
+    saveTeams(sseTeams.filter((_, i) => i !== idx)).catch(() => undefined);
   };
 
   // ── PDL Lookup ────────────────────────────────────────────────────────────
@@ -183,6 +229,7 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
         <div style={{ display: 'flex', borderBottom: '1px solid #edebe9' }}>
           <button style={TAB_BTN(tab === 'users')} onClick={() => setTab('users')}>Super Users</button>
           <button style={TAB_BTN(tab === 'bu')} onClick={() => setTab('bu')}>BU Config</button>
+          <button style={TAB_BTN(tab === 'teams')} onClick={() => setTab('teams')}>SSE Teams</button>
         </div>
 
         {/* Message bar */}
@@ -370,6 +417,107 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
               </div>
             </>
           )}
+          {/* ── SSE Teams tab ── */}
+          {tab === 'teams' && (
+            <>
+              <p style={{ fontSize: 12, color: '#605e5c', marginTop: 0 }}>
+                Map each SSE specialty type to the manager who oversees that team. The SE selects a specialty on the request form and the corresponding manager is notified.
+              </p>
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Specialty Teams</span>
+                <button onClick={() => setShowAddTeam(v => !v)}
+                  style={{ fontSize: 11, padding: '3px 10px', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>
+                  + Add Team
+                </button>
+              </div>
+
+              {showAddTeam && (
+                <div style={{ marginBottom: 12, padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>New Specialty Team</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <input placeholder="Specialty name (e.g. Mist)" value={newTeamName}
+                      onChange={e => setNewTeamName(e.target.value)}
+                      style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
+                    <input placeholder="Manager email (e.g. mike.bruno@hpe.com)" value={newTeamEmail}
+                      onChange={e => setNewTeamEmail(e.target.value)}
+                      style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={addTeam} disabled={!newTeamName.trim() || teamsSaving}
+                        style={{ flex: 1, padding: '5px 0', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        {teamsSaving ? '…' : 'Save'}
+                      </button>
+                      <button onClick={() => { setShowAddTeam(false); setNewTeamName(''); setNewTeamEmail(''); }}
+                        style={{ flex: 1, padding: '5px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {teamsLoading ? <div style={{ color: '#888', fontSize: 13 }}>Loading…</div> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {sseTeams.length === 0 && <div style={{ color: '#aaa', fontSize: 13, fontStyle: 'italic' }}>No teams configured yet.</div>}
+                  {sseTeams.map((team, idx) => {
+                    const isEditing = editTeamIdx === idx;
+                    return (
+                      <div key={idx} style={{ border: '1px solid #edebe9', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ padding: '10px 12px', background: '#f3f2f1', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>{team.name}</div>
+                          {!isEditing && (
+                            <>
+                              <button onClick={() => { setEditTeamIdx(idx); setEditTeamName(team.name); setEditTeamEmail(team.managerEmail); }}
+                                style={{ fontSize: 11, padding: '3px 10px', background: '#fff', color: HPE_NAVY, border: `1px solid ${HPE_NAVY}`, borderRadius: 3, cursor: 'pointer' }}>
+                                Edit
+                              </button>
+                              <button onClick={() => removeTeam(idx)} disabled={teamsSaving}
+                                style={{ background: 'none', border: 'none', color: '#d13438', fontSize: 16, cursor: 'pointer', lineHeight: 1, padding: '2px 4px' }}
+                                title="Remove team">✕</button>
+                            </>
+                          )}
+                        </div>
+                        <div style={{ padding: '10px 12px' }}>
+                          {isEditing ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              <div>
+                                <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>Specialty Name</div>
+                                <input value={editTeamName} onChange={e => setEditTeamName(e.target.value)}
+                                  style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '5px 8px', border: '1px solid #0078d4', borderRadius: 4 }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 11, color: '#555', marginBottom: 3 }}>Manager Email</div>
+                                <input value={editTeamEmail} onChange={e => setEditTeamEmail(e.target.value)}
+                                  placeholder="manager@hpe.com" autoFocus
+                                  style={{ width: '100%', boxSizing: 'border-box', fontSize: 12, padding: '5px 8px', border: '1px solid #0078d4', borderRadius: 4 }} />
+                              </div>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={commitTeamEdit} disabled={teamsSaving}
+                                  style={{ flex: 1, padding: '5px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                  {teamsSaving ? '…' : 'Save'}
+                                </button>
+                                <button onClick={() => setEditTeamIdx(null)}
+                                  style={{ flex: 1, padding: '5px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12 }}>
+                              <span style={{ color: '#888' }}>Manager: </span>
+                              <span style={{ color: team.managerEmail ? '#323130' : '#aaa', fontStyle: team.managerEmail ? 'normal' : 'italic' }}>
+                                {team.managerEmail || 'not set'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
         </div>
 
         {/* Footer */}

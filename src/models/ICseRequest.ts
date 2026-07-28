@@ -39,6 +39,7 @@ export interface ICseRequest {
   opportunity?: string;
   notes: string;
   modified?: string;
+  specialtyType?: string;
 }
 
 export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: string }> = {

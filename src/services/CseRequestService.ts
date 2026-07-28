@@ -13,7 +13,7 @@ const SP_SELECT = [
   'OnsiteTBD', 'OnsiteStart', 'OnsiteEnd', 'OnsiteDuration', 'OnsiteDestination',
   'SEPrimary', 'SEMPrimary', 'SEDEmail', 'BURegion', 'HPENBusinessUnit',
   'CustomerName', 'POCName', 'OpportunityAmount',
-  'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'Modified',
+  'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'Modified', 'SpecialtyType',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,6 +65,7 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     opportunity: item.Opportunity || '',
     notes: item.Notes || '',
     modified: item.Modified || '',
+    specialtyType: item.SpecialtyType || '',
   };
 }
 
@@ -105,8 +106,17 @@ export class CseRequestService {
       OpportunityAmount: req.opportunityAmount || 0,
       CustTemp: req.custTemp || 'Normal',
       Notes: req.notes,
+      SpecialtyType: req.specialtyType || '',
     });
     return result.Id || result.id || 0;
+  }
+
+  async reassign(id: number, requestedCse: string, sseManagerEmail: string): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
+      RequestedCSE: requestedCse,
+      SSEManagerEmail: sseManagerEmail,
+      RequestStatus: 'Accepted',
+    });
   }
 
   async getByPocId(pocId: number): Promise<ICseRequest[]> {

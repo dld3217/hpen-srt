@@ -18,6 +18,20 @@ export interface IBUConfig {
 
 export type BURegionMap = Record<string, IBUConfig>;
 
+export interface ISSETeam {
+  name: string;
+  managerEmail: string;
+}
+
+const DEFAULT_SSE_TEAMS: ISSETeam[] = [
+  { name: 'Legacy HPE/Aruba', managerEmail: '' },
+  { name: 'DCN', managerEmail: '' },
+  { name: 'Routing/RIS', managerEmail: '' },
+  { name: 'AIOps', managerEmail: '' },
+  { name: 'Mist', managerEmail: '' },
+  { name: 'SASE', managerEmail: '' },
+];
+
 const DEFAULT_BU_REGIONS: BURegionMap = {
   'Enterprise-West': {
     regions: { 'NorCal': {}, 'PacNW': {}, 'SoCal': {}, 'Southwest': {} }
@@ -102,6 +116,31 @@ export class ConfigService {
     } else {
       await this._sp.web.lists.getByTitle('AppConfig').items
         .add({ Title: 'BURegions', Value: JSON.stringify(buRegions) });
+    }
+  }
+
+  public async getSSETeams(): Promise<ISSETeam[]> {
+    try {
+      const items: { Value: string }[] = await this._sp.web.lists
+        .getByTitle('AppConfig').items
+        .filter("Title eq 'SSETeams'").select('Value')();
+      if (items.length > 0 && items[0].Value) {
+        return JSON.parse(items[0].Value) as ISSETeam[];
+      }
+    } catch { /* fall through */ }
+    return [...DEFAULT_SSE_TEAMS];
+  }
+
+  public async saveSSETeams(teams: ISSETeam[]): Promise<void> {
+    const items: { Id: number }[] = await this._sp.web.lists
+      .getByTitle('AppConfig').items
+      .filter("Title eq 'SSETeams'").select('Id')();
+    if (items.length > 0) {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .getById(items[0].Id).update({ Value: JSON.stringify(teams) });
+    } else {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .add({ Title: 'SSETeams', Value: JSON.stringify(teams) });
     }
   }
 

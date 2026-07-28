@@ -4,7 +4,7 @@ import { SPFI, PrincipalType, PrincipalSource } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import '@pnp/sp/sputilities';
 import { Spinner, SpinnerSize } from '@fluentui/react';
-import { ConfigService, BURegionMap, IBUConfig } from '../../../services/ConfigService';
+import { ConfigService, BURegionMap, IBUConfig, ISSETeam } from '../../../services/ConfigService';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
@@ -35,6 +35,10 @@ interface ISseFormData {
   csePriority: string;
   csePriorityReason: string;
   opportunityAmount: number;
+  specialtyType: string;
+  additionalResourceNeeded: boolean;
+  additionalSse: string;
+  additionalSpecialty: string;
 }
 
 const EMPTY_FORM: ISseFormData = {
@@ -58,9 +62,13 @@ const EMPTY_FORM: ISseFormData = {
   csePriority: '',
   csePriorityReason: '',
   opportunityAmount: 0,
+  specialtyType: '',
+  additionalResourceNeeded: false,
+  additionalSse: '',
+  additionalSpecialty: '',
 };
 
-const VERSION = '1.0.30';
+const VERSION = '1.0.31';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -314,6 +322,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   const [loading, setLoading]       = useState(true);
   const [buRegions, setBuRegions]   = useState<BURegionMap>({});
   const [solutions, setSolutions]   = useState<ISolutionDef[]>(SOLUTIONS);
+  const [sseTeams, setSseTeams]     = useState<ISSETeam[]>([]);
   const [formData, setFormData]     = useState<ISseFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(false);
@@ -325,10 +334,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
   useEffect(() => {
     const configSvc = new ConfigService(sp);
-    Promise.all([configSvc.getBURegions(), configSvc.getSolutions()])
-      .then(([bur, sols]) => {
+    Promise.all([configSvc.getBURegions(), configSvc.getSolutions(), configSvc.getSSETeams()])
+      .then(([bur, sols, teams]) => {
         setBuRegions(bur);
         setSolutions(sols);
+        setSseTeams(teams);
         const savedBU = localStorage.getItem('srt_bu') || '';
         const savedRegion = localStorage.getItem('srt_region') || '';
         if (savedBU && bur[savedBU]) {
@@ -377,20 +387,20 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     setSubmitError('');
 
     try {
-      const buConfig  = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
-      const sedEmail  = buConfig?.sedEmail || '';
-      const regionCfg = buConfig?.regions[formData.buRegion] || {};
-      const semEmail  = regionCfg.semEmail || '';
+      const buConfig       = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
+      const sedEmail       = buConfig?.sedEmail || '';
+      const regionCfg      = buConfig?.regions[formData.buRegion] || {};
+      const semEmail       = regionCfg.semEmail || '';
+      const activeTeam     = sseTeams.find(t => t.name === formData.specialtyType);
+      const sseManagerEmail = activeTeam?.managerEmail || '';
+      const schedStatus    = (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' as const : 'Dates Proposed' as const;
 
-      const svc = new CseRequestService(sp);
-      await svc.create({
-        title: `${formData.customerName} — SSE Request`,
-        source: 'SE Landing Page',
+      const basePayload = {
+        source: 'SE Landing Page' as const,
         linkedPocId: 0,
-        requestStatus: 'Pending',
-        scheduleStatus: (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' : 'Dates Proposed',
-        requestedCse: formData.requestedSse,
-        sseManagerEmail: '',
+        requestStatus: 'Pending' as const,
+        scheduleStatus: schedStatus,
+        sseManagerEmail,
         cseDescription: formData.notes,
         csePriority: formData.csePriority,
         csePriorityReason: formData.csePriorityReason,
@@ -413,12 +423,27 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         customerName: formData.customerName,
         pocName: '',
         opportunityAmount: formData.opportunityAmount,
-        custTemp: 'Normal',
+        custTemp: 'Normal' as const,
         signedOffBy: '',
         signOffDate: '',
         opportunity: formData.opportunity,
         notes: formData.notes,
-      });
+        specialtyType: formData.specialtyType,
+      };
+
+      const svc = new CseRequestService(sp);
+      await svc.create({ ...basePayload, title: `${formData.customerName} — SSE Request`, requestedCse: formData.requestedSse });
+
+      if (formData.additionalResourceNeeded && formData.additionalSse.includes('/')) {
+        const addlTeam = sseTeams.find(t => t.name === formData.additionalSpecialty);
+        await svc.create({
+          ...basePayload,
+          title: `${formData.customerName} — SSE Request (Additional Resource)`,
+          requestedCse: formData.additionalSse,
+          sseManagerEmail: addlTeam?.managerEmail || '',
+          specialtyType: formData.additionalSpecialty,
+        });
+      }
 
       setSubmitted(true);
     } catch (err) {
@@ -433,8 +458,10 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort()
     : [];
   const focusCodes        = formData.solutionsFocus ? formData.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : [];
-  const activeBuConfig    = formData.hpenBusinessUnit ? (buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined) : undefined;
-  const reviewingSedEmail = activeBuConfig?.sedEmail || '';
+  const activeBuConfig     = formData.hpenBusinessUnit ? (buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined) : undefined;
+  const reviewingSedEmail  = activeBuConfig?.sedEmail || '';
+  const activeTeam         = sseTeams.find(t => t.name === formData.specialtyType);
+  const activeTeamManager  = activeTeam?.managerEmail || '';
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -566,6 +593,36 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       {/* Section 2 — SSE Selection */}
       <div style={SECTION}>
         <div style={SECTION_TITLE}>SSE Selection</div>
+
+        {/* Specialty Type */}
+        {sseTeams.length > 0 && (
+          <div style={FIELD_ROW}>
+            <label style={LABEL_STYLE}>Specialty Type</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {sseTeams.map(team => {
+                const active = formData.specialtyType === team.name;
+                return (
+                  <button key={team.name} type="button"
+                    onClick={() => set('specialtyType', active ? '' : team.name)}
+                    style={{
+                      padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
+                      background: active ? HPE_NAVY : '#f3f2f1',
+                      color: active ? '#fff' : '#323130',
+                      border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
+                    }}>
+                    {team.name}
+                  </button>
+                );
+              })}
+            </div>
+            {activeTeamManager && (
+              <div style={{ marginTop: 6, fontSize: 11, color: '#605e5c' }}>
+                Manager: <strong>{emailToName(activeTeamManager)}</strong> will be notified when this request is accepted.
+              </div>
+            )}
+          </div>
+        )}
+
         {reviewingSedEmail && (
           <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
             <strong>{emailToName(reviewingSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
@@ -578,6 +635,50 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           onChange={v => set('requestedSse', v)}
           searchUsers={handleSearchUsers}
         />
+
+        {/* Additional Resource */}
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <input type="checkbox" checked={formData.additionalResourceNeeded}
+              onChange={e => set('additionalResourceNeeded', e.target.checked)}
+              style={{ accentColor: HPE_NAVY, width: 15, height: 15 }} />
+            Additional resource needed?
+          </label>
+        </div>
+
+        {formData.additionalResourceNeeded && (
+          <div style={{ marginTop: 12, padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE</div>
+            {sseTeams.length > 0 && (
+              <div style={FIELD_ROW}>
+                <label style={LABEL_STYLE}>Specialty Type</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {sseTeams.map(team => {
+                    const active = formData.additionalSpecialty === team.name;
+                    return (
+                      <button key={team.name} type="button"
+                        onClick={() => set('additionalSpecialty', active ? '' : team.name)}
+                        style={{
+                          padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
+                          background: active ? HPE_NAVY : '#f3f2f1',
+                          color: active ? '#fff' : '#323130',
+                          border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
+                        }}>
+                        {team.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <PeoplePickerField
+              label="Additional SSE"
+              value={formData.additionalSse}
+              onChange={v => set('additionalSse', v)}
+              searchUsers={handleSearchUsers}
+            />
+          </div>
+        )}
       </div>
 
       {/* Section 3 — Solutions Focus */}
