@@ -72,7 +72,7 @@ const EMPTY_FORM: ISseFormData = {
   additionalSpecialty2: '',
 };
 
-const VERSION = '1.0.35';
+const VERSION = '1.0.42';
 
 const greeting = (): string => {
   const h = new Date().getHours();
