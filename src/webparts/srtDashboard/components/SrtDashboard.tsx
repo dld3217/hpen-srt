@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.43';
+const VERSION = '1.0.44';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -107,6 +107,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterRegion, setFilterRegion]         = useState('All');
   const [filterPriority, setFilterPriority]     = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
+  const [showCompleted, setShowCompleted]       = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
   const [activeTile, setActiveTile]             = useState<string | null>(null);
@@ -351,7 +352,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     return visibleRequests;
   })();
 
+  const hideSignedOff = !showCompleted && activeTile !== 'Complete';
+  const hiddenSignedOffCount = hideSignedOff ? tileFiltered.filter(r => !!r.signedOffBy).length : 0;
+
   const filteredRequests = tileFiltered.filter(r => {
+    if (hideSignedOff && !!r.signedOffBy) return false;
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
@@ -533,6 +538,18 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
+            </button>
+          )}
+          {hiddenSignedOffCount > 0 && (
+            <button onClick={() => setShowCompleted(true)}
+              style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #d4d4d4', borderRadius: 4, cursor: 'pointer', color: '#605e5c', marginLeft: 'auto' }}>
+              Show Completed ({hiddenSignedOffCount})
+            </button>
+          )}
+          {showCompleted && activeTile !== 'Complete' && (
+            <button onClick={() => setShowCompleted(false)}
+              style={{ fontSize: 11, padding: '5px 10px', background: '#e8f5e9', border: `1px solid ${HPE_GREEN}`, borderRadius: 4, cursor: 'pointer', color: '#1a6b2e', marginLeft: 'auto' }}>
+              Hide Completed
             </button>
           )}
         </div>
