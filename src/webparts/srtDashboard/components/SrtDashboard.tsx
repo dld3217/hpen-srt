@@ -354,11 +354,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   })();
 
   const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
-  const completedRows = visibleRequests.filter(r => !!r.signedOffBy);
+  const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete');
 
   const filteredRequests = tileFiltered.filter(r => {
     if (!activeTile && r.requestStatus === 'Pending') return false;
-    if (!activeTile && !!r.signedOffBy) return false;
+    if (!activeTile && r.requestStatus === 'Complete') return false;
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
@@ -1226,7 +1226,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           </div>
         )}
 
-        {/* ── Completed / signed-off ── */}
+        {/* ── Completed & Awaiting Sign-off ── */}
         {!activeTile && completedRows.length > 0 && (
           <div style={{ marginTop: 20, border: '1px solid #c3e6cb', borderRadius: 6, overflow: 'hidden' }}>
             <div
@@ -1235,11 +1235,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#1a6b2e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Completed
+                  Completed &amp; Awaiting Sign-off
                 </span>
                 <span style={{ fontSize: 11, background: HPE_GREEN, color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
                   {completedRows.length}
                 </span>
+                {completedRows.filter(r => !r.signedOffBy).length > 0 && (
+                  <span style={{ fontSize: 11, background: '#8a6000', color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
+                    {completedRows.filter(r => !r.signedOffBy).length} need sign-off
+                  </span>
+                )}
               </div>
               <span style={{ fontSize: 12, color: '#1a6b2e' }}>{showCompletedSection ? '▲' : '▼'}</span>
             </div>
@@ -1247,7 +1252,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#f8fff9' }}>
-                    {(['Customer', 'SSE', 'Solutions', 'Signed Off By', 'Date'] as const).map(h => (
+                    {(['Customer', 'SSE', 'Solutions', 'Sign-off', 'Date'] as const).map(h => (
                       <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#1a6b2e', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</th>
                     ))}
                   </tr>
@@ -1263,7 +1268,43 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                         {parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse) || '—'}
                       </td>
                       <td style={{ padding: '7px 10px', fontSize: 11, color: '#555' }}>{codeToName(req.solutionsFocus)}</td>
-                      <td style={{ padding: '7px 10px', color: '#107c10', fontWeight: 600 }}>✓ {req.signedOffBy}</td>
+                      <td style={{ padding: '7px 10px' }} onClick={e => e.stopPropagation()}>
+                        {req.signedOffBy ? (
+                          <div style={{ fontSize: 11, color: '#107c10', fontWeight: 600 }}>✓ {req.signedOffBy}</div>
+                        ) : isAdmin && signOffId === req.id ? (
+                          <div>
+                            <input
+                              type="text"
+                              value={signOffName}
+                              onChange={e => setSignOffName(e.target.value)}
+                              placeholder="Your name"
+                              autoFocus
+                              style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }}
+                            />
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button
+                                disabled={!signOffName.trim() || savingId === req.id}
+                                onClick={() => handleSignOff(req.id!).catch(() => undefined)}
+                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                                {savingId === req.id ? '…' : '✓ Confirm'}
+                              </button>
+                              <button
+                                onClick={() => { setSignOffId(null); setSignOffName(''); }}
+                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : isAdmin ? (
+                          <button
+                            onClick={() => { setSignOffId(req.id!); setSignOffName(''); }}
+                            style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                            Sign Off
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 11, color: '#8a6000' }}>Awaiting Sign-off</span>
+                        )}
+                      </td>
                       <td style={{ padding: '7px 10px', color: '#888', whiteSpace: 'nowrap' }}>{fmtDate(req.signOffDate)}</td>
                     </tr>
                   ))}
