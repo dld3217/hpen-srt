@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.35';
+const VERSION = '1.0.36';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -91,6 +91,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [needsInfoNote, setNeedsInfoNote]       = useState('');
   const [reassignId, setReassignId]             = useState<number | null>(null);
   const [reassignSse, setReassignSse]           = useState('');
+  const [showOnsitePanel, setShowOnsitePanel]   = useState(true);
   const [expandedId, setExpandedId]             = useState<number | null>(null);
   const [dateEdit, setDateEdit]                 = useState<IDateEdit | null>(null);
   const [savingDates, setSavingDates]           = useState(false);
@@ -450,6 +451,47 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           );
         })}
       </div>
+
+      {/* Upcoming Onsite panel */}
+      {(() => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const upcoming = requests
+          .filter(r => !r.onsiteTbd && r.onsiteStart && new Date(r.onsiteStart) >= today && !['Cancelled', 'Declined'].includes(r.requestStatus))
+          .sort((a, b) => new Date(a.onsiteStart).getTime() - new Date(b.onsiteStart).getTime());
+        if (upcoming.length === 0) return null;
+        return (
+          <div style={{ margin: '0 20px 12px', border: '1px solid #edebe9', borderRadius: 6, overflow: 'hidden' }}>
+            <div
+              onClick={() => setShowOnsitePanel(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#f0f9f4', borderBottom: showOnsitePanel ? '1px solid #edebe9' : 'none', cursor: 'pointer', userSelect: 'none' as const }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Upcoming Onsite Engagements
+                </span>
+                <span style={{ fontSize: 11, background: HPE_GREEN, color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
+                  {upcoming.length}
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: '#888' }}>{showOnsitePanel ? '▲' : '▼'}</span>
+            </div>
+            {showOnsitePanel && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {upcoming.map((r, i) => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', background: i % 2 === 0 ? '#fff' : '#faf9f8', borderTop: i === 0 ? 'none' : '1px solid #f0f0f0', fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, color: HPE_NAVY, minWidth: 130 }}>{parseSseName(r.requestedCse.split('/')[0]?.trim() || r.requestedCse)}</div>
+                    <div style={{ color: '#107c10', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {fmtDate(r.onsiteStart)}{r.onsiteEnd && r.onsiteEnd !== r.onsiteStart ? ` – ${fmtDate(r.onsiteEnd)}` : ''}
+                    </div>
+                    {r.onsiteDestination && <div style={{ color: '#605e5c' }}>{r.onsiteDestination}</div>}
+                    <div style={{ color: '#888', marginLeft: 'auto', fontStyle: 'italic' }}>{r.customerName}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Request table */}
       <div ref={tableRef} style={{ padding: '16px 20px' }}>
