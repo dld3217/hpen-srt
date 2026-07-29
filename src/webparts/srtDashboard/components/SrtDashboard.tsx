@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.45';
+const VERSION = '1.0.46';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -381,6 +381,390 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete');
   const needsSignOff = complete.filter(r => !r.signedOffBy);
 
+  const renderRow = (req: ICseRequest, i: number, hideReassign = false): JSX.Element => {
+    const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
+    const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus] || SCHEDULE_STATUS_STYLE.TBD;
+    const tempStyle     = CUST_TEMP_STYLE[req.custTemp]    || CUST_TEMP_STYLE.Normal;
+    const sseName       = parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse);
+    const isExpanded    = expandedId === req.id;
+    const isCancelled   = req.requestStatus === 'Cancelled';
+    const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail))
+                          && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
+    const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
+    const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
+    const colSpan       = isAdmin ? 12 : 11;
+    const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
+    return (
+      <React.Fragment key={req.id ?? i}>
+      <tr style={{ background: rowBg, borderBottom: isExpanded ? 'none' : '1px solid #edebe9', cursor: 'pointer' }}
+          onClick={() => handleExpand(req)}>
+        <td style={{ ...TD, opacity: isCancelled ? 0.6 : 1 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <span style={{ fontSize: 10, color: '#6b2faf', marginTop: 3, flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
+            <div>
+              <div style={{ fontWeight: 600, textDecoration: isCancelled ? 'line-through' : 'none' }}>{req.customerName || '—'}</div>
+              {req.pocName && <div style={{ fontSize: 11, color: '#888' }}>{req.pocName}</div>}
+            </div>
+          </div>
+        </td>
+        <td style={{ ...TD, fontSize: 12, opacity: isCancelled ? 0.6 : 1 }}>
+          {parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || '—'}
+        </td>
+        <td style={TD}>
+          <div>{sseName || '—'}</div>
+          {req.sedEmail && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{emailToName(req.sedEmail)}</div>}
+        </td>
+        <td style={TD}>
+          <div>{req.hpenBusinessUnit}</div>
+          <div style={{ fontSize: 11, color: '#888' }}>{req.buRegion}</div>
+        </td>
+        <td style={{ ...TD, fontSize: 11, maxWidth: 160, cursor: isAdmin && editSolId !== req.id ? 'pointer' : 'default' }}
+            title={isAdmin && editSolId !== req.id ? 'Click to edit solutions' : undefined}
+            onClick={e => { e.stopPropagation(); if (isAdmin && editSolId !== req.id) { setEditSolId(req.id!); setEditSolCodes(new Set(req.solutionsFocus ? req.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : [])); } }}>
+          {isAdmin && editSolId === req.id ? (
+            <div onClick={e => e.stopPropagation()}>
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 4, padding: '4px 6px', background: '#fff', marginBottom: 6 }}>
+                {SOLUTION_CATEGORIES.map((cat, ci) => (
+                  <div key={cat}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', padding: `${ci === 0 ? 2 : 6}px 0 2px`, borderTop: ci === 0 ? 'none' : '1px solid #f0f0f0' }}>{cat}</div>
+                    {SOLUTIONS.filter(s => s.category === cat).map(s => (
+                      <label key={s.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', padding: '2px 0' }}>
+                        <input type="checkbox" checked={editSolCodes.has(s.code)}
+                          onChange={ev => { const next = new Set(editSolCodes); if (ev.target.checked) next.add(s.code); else next.delete(s.code); setEditSolCodes(next); }} />
+                        {s.name}
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => handleSolutionSave(req.id!).catch(() => undefined)}
+                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>Save</button>
+                <button onClick={() => { setEditSolId(null); setEditSolCodes(new Set()); }}
+                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <span style={{ textDecoration: isAdmin ? 'underline dotted' : 'none' }}>{codeToName(req.solutionsFocus)}</span>
+          )}
+        </td>
+        <td style={TD}>
+          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+            background: req.csePriority === 'High' ? '#fde7e9' : req.csePriority === 'Medium' ? '#fff4ce' : '#e8faf3',
+            color: req.csePriority === 'High' ? '#a4262c' : req.csePriority === 'Medium' ? '#8a6000' : '#107c10' }}>
+            {req.csePriority || '—'}
+          </span>
+        </td>
+        <td style={TD} onClick={e => e.stopPropagation()}>
+          {isAdmin ? (
+            <select value={req.requestStatus}
+              onChange={e => handleStatusChange(req.id!, e.target.value as CseRequestStatus).catch(() => undefined)}
+              style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusStyle.bg, color: statusStyle.color, border: 'none', cursor: 'pointer' }}>
+              {(['Pending','Accepted','Scheduled','In Progress','Complete','Declined','Needs Info','Cancelled'] as CseRequestStatus[]).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          ) : (
+            <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusStyle.bg, color: statusStyle.color }}>{req.requestStatus}</span>
+          )}
+        </td>
+        <td style={TD}>
+          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{req.scheduleStatus}</span>
+          {!req.remoteTbd && req.remoteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}</div>}
+          {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
+        </td>
+        <td style={TD} onClick={e => e.stopPropagation()}>
+          {isAdmin ? (
+            <select value={req.custTemp}
+              onChange={e => handleCustTemp(req.id!, e.target.value).catch(() => undefined)}
+              style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: tempStyle.bg, color: tempStyle.color, border: 'none', cursor: 'pointer' }}>
+              {(['Low','Normal','High','Critical']).map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          ) : (
+            <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: tempStyle.bg, color: tempStyle.color }}>{req.custTemp}</span>
+          )}
+        </td>
+        <td style={TD} onClick={e => e.stopPropagation()}>
+          {req.signedOffBy ? (
+            <div style={{ fontSize: 11, color: '#107c10' }}>✓ {req.signedOffBy}</div>
+          ) : req.requestStatus === 'Complete' ? (
+            isAdmin && signOffId === req.id ? (
+              <div>
+                <input type="text" value={signOffName} onChange={e => setSignOffName(e.target.value)} placeholder="Your name" autoFocus
+                  style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button disabled={!signOffName.trim() || savingId === req.id} onClick={() => handleSignOff(req.id!).catch(() => undefined)}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    {savingId === req.id ? '…' : '✓ Confirm'}
+                  </button>
+                  <button onClick={() => { setSignOffId(null); setSignOffName(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            ) : isAdmin ? (
+              <button onClick={() => { setSignOffId(req.id!); setSignOffName(''); }}
+                style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Sign Off</button>
+            ) : (
+              <span style={{ fontSize: 11, color: '#8a6000' }}>Pending</span>
+            )
+          ) : (
+            <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
+          )}
+        </td>
+        <td style={{ ...TD, fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>{fmtDate(req.modified || '') || '—'}</td>
+        {isAdmin && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
+          {req.requestStatus === 'Pending' && (
+            decliningId === req.id ? (
+              <div>
+                <input type="text" value={declineNote} onChange={e => setDeclineNote(e.target.value)} placeholder="Reason (optional)"
+                  style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button disabled={savingId === req.id} onClick={() => handleDeclineConfirm(req.id!)}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    {savingId === req.id ? '…' : 'Confirm'}
+                  </button>
+                  <button onClick={() => { setDecliningId(null); setDeclineNote(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            ) : needsInfoId === req.id ? (
+              <div>
+                <input type="text" value={needsInfoNote} onChange={e => setNeedsInfoNote(e.target.value)} placeholder="What info is needed?"
+                  style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button disabled={savingId === req.id} onClick={() => handleNeedsInfoConfirm(req.id!)}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    {savingId === req.id ? '…' : 'Send'}
+                  </button>
+                  <button onClick={() => { setNeedsInfoId(null); setNeedsInfoNote(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            ) : !hideReassign && reassignId === req.id ? (
+              <div>
+                <div style={{ fontSize: 10, color: '#605e5c', marginBottom: 3 }}>Enter new SSE as &ldquo;Name / email&rdquo;</div>
+                <input type="text" value={reassignSse} onChange={e => setReassignSse(e.target.value)}
+                  placeholder="First Last / email@hpe.com" autoFocus
+                  style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button disabled={savingId === req.id || !reassignSse.includes('/')} onClick={() => handleReassignConfirm(req.id!)}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#0078d4', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    {savingId === req.id ? '…' : 'Reassign'}
+                  </button>
+                  <button onClick={() => { setReassignId(null); setReassignSse(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <button disabled={savingId === req.id} onClick={() => handleAccept(req.id!)}
+                  style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                  {savingId === req.id ? '…' : '✓ Accept'}
+                </button>
+                {!hideReassign && (
+                  <button onClick={() => { setReassignId(req.id!); setReassignSse(''); }}
+                    style={{ fontSize: 11, padding: '4px 10px', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    ↔ Reassign
+                  </button>
+                )}
+                <button onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}
+                  style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                  ? Info
+                </button>
+                <button onClick={() => { setDecliningId(req.id!); setDeclineNote(''); }}
+                  style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                  ✕ Decline
+                </button>
+              </div>
+            )
+          )}
+          {req.requestStatus !== 'Pending' && (
+            <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
+          )}
+        </td>}
+      </tr>
+
+      {/* ── Expanded date drawer ── */}
+      {isExpanded && dateEdit && (
+        <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
+          <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Remote Support</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 8, cursor: canEditDates ? 'pointer' : 'default' }}>
+                  <input type="checkbox" checked={dateEdit.remoteTbd} disabled={!canEditDates}
+                    onChange={e => setDateEdit(prev => prev ? { ...prev, remoteTbd: e.target.checked, remoteStart: '', remoteEnd: '' } : prev)} />
+                  TBD — dates not yet set
+                </label>
+                {!dateEdit.remoteTbd && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Start</div>
+                      <input type="date" value={dateEdit.remoteStart} disabled={!canEditDates}
+                        onChange={e => setDateEdit(prev => prev ? { ...prev, remoteStart: e.target.value } : prev)}
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>End</div>
+                      <input type="date" value={dateEdit.remoteEnd} disabled={!canEditDates}
+                        onChange={e => setDateEdit(prev => prev ? { ...prev, remoteEnd: e.target.value } : prev)}
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Duration (e.g. 2 days)</div>
+                      <input type="text" value={dateEdit.remoteDuration} disabled={!canEditDates}
+                        onChange={e => setDateEdit(prev => prev ? { ...prev, remoteDuration: e.target.value } : prev)}
+                        placeholder="e.g. 2 days"
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>On-Site Support</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 8, cursor: canEditDates ? 'pointer' : 'default' }}>
+                  <input type="checkbox" checked={dateEdit.onsiteTbd} disabled={!canEditDates}
+                    onChange={e => setDateEdit(prev => prev ? { ...prev, onsiteTbd: e.target.checked, onsiteStart: '', onsiteEnd: '' } : prev)} />
+                  TBD — dates not yet set
+                </label>
+                {!dateEdit.onsiteTbd && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Start</div>
+                      <input type="date" value={dateEdit.onsiteStart} disabled={!canEditDates}
+                        onChange={e => { const s = e.target.value; setDateEdit(prev => prev ? { ...prev, onsiteStart: s, onsiteDuration: calcOnsiteDays(s, prev.onsiteEnd) } : prev); }}
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>End</div>
+                      <input type="date" value={dateEdit.onsiteEnd} disabled={!canEditDates}
+                        onChange={e => { const en = e.target.value; setDateEdit(prev => prev ? { ...prev, onsiteEnd: en, onsiteDuration: calcOnsiteDays(prev.onsiteStart, en) } : prev); }}
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Duration (auto-calculated)</div>
+                      <input type="text" value={dateEdit.onsiteDuration} disabled={!canEditDates}
+                        onChange={e => setDateEdit(prev => prev ? { ...prev, onsiteDuration: e.target.value } : prev)}
+                        placeholder="Set dates above"
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box', background: '#f5f5f5' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Destination</div>
+                      <input type="text" value={dateEdit.onsiteDestination} disabled={!canEditDates}
+                        onChange={e => setDateEdit(prev => prev ? { ...prev, onsiteDestination: e.target.value } : prev)}
+                        placeholder="City, ST"
+                        style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Opportunity + Notes */}
+            <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Opportunity</div>
+                <textarea value={drawerOpportunity} onChange={e => setDrawerOpportunity(e.target.value)} rows={4}
+                  placeholder="Background, context, or opportunity details…"
+                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Notes</div>
+                <textarea value={drawerNotes} onChange={e => setDrawerNotes(e.target.value)} rows={4}
+                  placeholder="Running notes, date-tagged updates…"
+                  style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+              </div>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+              <button disabled={savingNotes} onClick={() => handleSaveNotes(req.id!).catch(() => undefined)}
+                style={{ padding: '5px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingNotes ? 0.6 : 1 }}>
+                {savingNotes ? 'Saving…' : 'Save Notes'}
+              </button>
+            </div>
+
+            {/* Action bar */}
+            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderTop: '1px solid #e0d8f0', paddingTop: 12 }}>
+              {canEditDates && (
+                <button disabled={savingDates} onClick={() => handleSaveDates(req).catch(() => undefined)}
+                  style={{ padding: '6px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingDates ? 0.6 : 1 }}>
+                  {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save (will flag as Rescheduling)' : 'Save Dates'}
+                </button>
+              )}
+              {showDateActions && !canEditDates === false && (
+                declineDatesId === req.id ? (
+                  <>
+                    <input type="text" value={declineDatesNote} onChange={e => setDeclineDatesNote(e.target.value)}
+                      placeholder="Reason dates don't work (optional)"
+                      style={{ flex: 1, minWidth: 200, fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
+                    <button disabled={savingDates} onClick={() => handleDeclineDatesConfirm(req.id!).catch(() => undefined)}
+                      style={{ padding: '5px 14px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {savingDates ? '…' : 'Confirm Decline'}
+                    </button>
+                    <button onClick={() => { setDeclineDatesId(null); setDeclineDatesNote(''); }}
+                      style={{ padding: '5px 14px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
+                      style={{ padding: '6px 18px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓ Confirm Dates</button>
+                    <button onClick={() => setDeclineDatesId(req.id!)}
+                      style={{ padding: '6px 14px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✕ Dates Don&apos;t Work</button>
+                  </>
+                )
+              )}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                {canCancel(req) && cancelId !== req.id && (
+                  <button onClick={() => { setCancelId(req.id!); setCancelReason(''); setCancelNote(''); }}
+                    style={{ padding: '5px 14px', background: '#fff', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel Request</button>
+                )}
+                <button onClick={() => { setExpandedId(null); setDateEdit(null); setCancelId(null); }}
+                  style={{ padding: '5px 14px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Close</button>
+              </div>
+            </div>
+
+            {cancelId === req.id && (
+              <div style={{ marginTop: 12, padding: '14px 16px', background: '#fde7e9', border: '1px solid #a4262c', borderRadius: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#a4262c', marginBottom: 10 }}>Cancel this SSE Request</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>Reason <span style={{ color: '#a4262c' }}>*</span></div>
+                    <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                      style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+                      <option value="">— Select reason —</option>
+                      {CANCEL_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>Additional notes (optional)</div>
+                    <input type="text" value={cancelNote} onChange={e => setCancelNote(e.target.value)}
+                      placeholder="Any additional context..."
+                      style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button disabled={!cancelReason || savingDates} onClick={() => handleCancelConfirm(req.id!).catch(() => undefined)}
+                    style={{ padding: '6px 18px', background: cancelReason ? '#a4262c' : '#e0e0e0', color: cancelReason ? '#fff' : '#aaa', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: cancelReason ? 'pointer' : 'not-allowed' }}>
+                    {savingDates ? 'Cancelling…' : 'Confirm Cancellation'}
+                  </button>
+                  <button onClick={() => { setCancelId(null); setCancelReason(''); setCancelNote(''); }}
+                    style={{ padding: '6px 14px', background: '#fff', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Never Mind</button>
+                </div>
+              </div>
+            )}
+
+            {req.scheduleStatus !== 'TBD' && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
+                Current schedule status: <strong>{req.scheduleStatus}</strong>
+                {req.scheduleStatus === 'Dates Confirmed' && ' — saving new dates will flag this as Rescheduling and notify the SSE.'}
+                {req.scheduleStatus === 'Dates Proposed' && ' — awaiting SSE confirmation.'}
+                {req.scheduleStatus === 'Rescheduling' && ' — SSE declined the previous dates. Update and save to re-propose.'}
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+      </React.Fragment>
+    );
+  };
+
   return (
     <div style={{ fontFamily: 'inherit', minHeight: 400 }}>
 
@@ -503,126 +887,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {/* Request table */}
       <div ref={tableRef} style={{ padding: '16px 20px' }}>
 
-        {/* ── Awaiting Acceptance ── */}
-        {!activeTile && pendingRows.length > 0 && (
-          <div style={{ marginBottom: 16, border: '1px solid #ffd780', borderRadius: 6, overflow: 'hidden' }}>
-            <div
-              onClick={() => setShowPendingSection(s => !s)}
-              style={{ background: '#fff4ce', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' as const }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 3, height: 14, background: '#8a6000', borderRadius: 2 }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#8a6000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Awaiting Acceptance
-                </span>
-                <span style={{ fontSize: 11, background: '#8a6000', color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
-                  {pendingRows.length}
-                </span>
-              </div>
-              <span style={{ fontSize: 12, color: '#8a6000' }}>{showPendingSection ? '▲' : '▼'}</span>
-            </div>
-            {showPendingSection && pendingRows.map((req, pi) => (
-              <div key={req.id ?? pi}
-                   style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', borderTop: '1px solid #ffd780', background: pi % 2 === 0 ? '#fffdf5' : '#fff8e8', flexWrap: 'wrap' }}>
-                <div style={{ flex: '2 1 160px', minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{req.customerName || '—'}</div>
-                  <div style={{ fontSize: 11, color: '#888' }}>{req.hpenBusinessUnit} · {req.buRegion}</div>
-                  {req.pocName && <div style={{ fontSize: 11, color: '#aaa' }}>{req.pocName}</div>}
-                </div>
-                <div style={{ flex: '1 1 100px', minWidth: 0 }}>
-                  <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>SE</div>
-                  <div style={{ fontSize: 12 }}>{parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || '—'}</div>
-                </div>
-                <div style={{ flex: '1 1 100px', minWidth: 0 }}>
-                  <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>SSE Requested</div>
-                  <div style={{ fontSize: 12 }}>{parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse) || 'Unassigned'}</div>
-                </div>
-                <div style={{ flex: '0 0 auto', alignSelf: 'flex-start', paddingTop: 2 }}>
-                  <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-                    background: req.csePriority === 'Critical' ? '#a4262c' : req.csePriority === 'High' ? '#fde7e9' : req.csePriority === 'Medium' ? '#fff4ce' : '#e8faf3',
-                    color: req.csePriority === 'Critical' ? '#fff' : req.csePriority === 'High' ? '#a4262c' : req.csePriority === 'Medium' ? '#8a6000' : '#107c10' }}>
-                    {req.csePriority || '—'}
-                  </span>
-                </div>
-                {isAdmin && (
-                  <div style={{ flex: '0 0 auto' }} onClick={e => e.stopPropagation()}>
-                    {decliningId === req.id ? (
-                      <div>
-                        <input type="text" value={declineNote} onChange={e => setDeclineNote(e.target.value)}
-                          placeholder="Reason (optional)"
-                          style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }} />
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button disabled={savingId === req.id} onClick={() => handleDeclineConfirm(req.id!)}
-                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                            {savingId === req.id ? '…' : 'Confirm'}
-                          </button>
-                          <button onClick={() => { setDecliningId(null); setDeclineNote(''); }}
-                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : needsInfoId === req.id ? (
-                      <div>
-                        <input type="text" value={needsInfoNote} onChange={e => setNeedsInfoNote(e.target.value)}
-                          placeholder="What info is needed?"
-                          style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }} />
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button disabled={savingId === req.id} onClick={() => handleNeedsInfoConfirm(req.id!)}
-                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                            {savingId === req.id ? '…' : 'Send'}
-                          </button>
-                          <button onClick={() => { setNeedsInfoId(null); setNeedsInfoNote(''); }}
-                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : reassignId === req.id ? (
-                      <div>
-                        <div style={{ fontSize: 10, color: '#605e5c', marginBottom: 3 }}>Enter new SSE as &ldquo;Name / email&rdquo;</div>
-                        <input type="text" value={reassignSse} onChange={e => setReassignSse(e.target.value)}
-                          placeholder="First Last / email@hpe.com" autoFocus
-                          style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }} />
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button disabled={savingId === req.id || !reassignSse.includes('/')} onClick={() => handleReassignConfirm(req.id!)}
-                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#0078d4', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                            {savingId === req.id ? '…' : 'Reassign'}
-                          </button>
-                          <button onClick={() => { setReassignId(null); setReassignSse(''); }}
-                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <button disabled={savingId === req.id} onClick={() => handleAccept(req.id!)}
-                          style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                          {savingId === req.id ? '…' : '✓ Accept'}
-                        </button>
-                        <button onClick={() => { setReassignId(req.id!); setReassignSse(''); }}
-                          style={{ fontSize: 11, padding: '4px 10px', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                          ↔ Reassign
-                        </button>
-                        <button onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}
-                          style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                          ? Info
-                        </button>
-                        <button onClick={() => { setDecliningId(req.id!); setDeclineNote(''); }}
-                          style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                          ✕ Decline
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
         <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 6 }}>
-          {activeTile ? activeTile : 'Active Engagements'} ({filteredRequests.length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
+          {activeTile ? activeTile : 'SSE Requests'} ({(activeTile ? filteredRequests : [...pendingRows, ...filteredRequests, ...completedRows]).length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
         </div>
 
         {/* Filter bar */}
@@ -697,622 +963,41 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 </tr>
               </thead>
               <tbody>
-                {filteredRequests.map((req, i) => {
-                  const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
-                  const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus] || SCHEDULE_STATUS_STYLE.TBD;
-                  const tempStyle     = CUST_TEMP_STYLE[req.custTemp]    || CUST_TEMP_STYLE.Normal;
-                  const sseName       = parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse);
-                  const isExpanded    = expandedId === req.id;
-                  const isCancelled   = req.requestStatus === 'Cancelled';
-                  const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail))
-                                        && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
-                  const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
-                  const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
-                  const colSpan       = isAdmin ? 12 : 11;
-                  const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
-                  return (
-                    <React.Fragment key={req.id ?? i}>
-                    <tr style={{ background: rowBg, borderBottom: isExpanded ? 'none' : '1px solid #edebe9', cursor: 'pointer' }}
-                        onClick={() => handleExpand(req)}>
-                      <td style={{ ...TD, opacity: isCancelled ? 0.6 : 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                          <span style={{ fontSize: 10, color: '#6b2faf', marginTop: 3, flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
-                          <div>
-                            <div style={{ fontWeight: 600, textDecoration: isCancelled ? 'line-through' : 'none' }}>{req.customerName || '—'}</div>
-                            {req.pocName && <div style={{ fontSize: 11, color: '#888' }}>{req.pocName}</div>}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ ...TD, fontSize: 12, opacity: isCancelled ? 0.6 : 1 }}>
-                        {parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || '—'}
-                      </td>
-                      <td style={TD}>
-                        <div>{sseName || '—'}</div>
-                        {req.sedEmail && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{emailToName(req.sedEmail)}</div>}
-                      </td>
-                      <td style={TD}>
-                        <div>{req.hpenBusinessUnit}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>{req.buRegion}</div>
-                      </td>
-                      <td
-                        style={{ ...TD, fontSize: 11, maxWidth: 160, cursor: isAdmin && editSolId !== req.id ? 'pointer' : 'default' }}
-                        title={isAdmin && editSolId !== req.id ? 'Click to edit solutions' : undefined}
-                        onClick={e => {
-                          e.stopPropagation();
-                          if (isAdmin && editSolId !== req.id) {
-                            setEditSolId(req.id!);
-                            setEditSolCodes(new Set(req.solutionsFocus ? req.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : []));
-                          }
-                        }}>
-                        {isAdmin && editSolId === req.id ? (
-                          <div onClick={e => e.stopPropagation()}>
-                            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #ddd', borderRadius: 4, padding: '4px 6px', background: '#fff', marginBottom: 6 }}>
-                              {SOLUTION_CATEGORIES.map((cat, ci) => (
-                                <div key={cat}>
-                                  <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', padding: `${ci === 0 ? 2 : 6}px 0 2px`, borderTop: ci === 0 ? 'none' : '1px solid #f0f0f0' }}>{cat}</div>
-                                  {SOLUTIONS.filter(s => s.category === cat).map(s => (
-                                    <label key={s.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, cursor: 'pointer', padding: '2px 0' }}>
-                                      <input type="checkbox" checked={editSolCodes.has(s.code)}
-                                        onChange={ev => {
-                                          const next = new Set(editSolCodes);
-                                          if (ev.target.checked) next.add(s.code); else next.delete(s.code);
-                                          setEditSolCodes(next);
-                                        }} />
-                                      {s.name}
-                                    </label>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              <button onClick={() => handleSolutionSave(req.id!).catch(() => undefined)}
-                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                Save
-                              </button>
-                              <button onClick={() => { setEditSolId(null); setEditSolCodes(new Set()); }}
-                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <span style={{ textDecoration: isAdmin ? 'underline dotted' : 'none' }}>
-                            {codeToName(req.solutionsFocus)}
-                          </span>
-                        )}
-                      </td>
-                      <td style={TD}>
-                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-                          background: req.csePriority === 'High' ? '#fde7e9' : req.csePriority === 'Medium' ? '#fff4ce' : '#e8faf3',
-                          color: req.csePriority === 'High' ? '#a4262c' : req.csePriority === 'Medium' ? '#8a6000' : '#107c10' }}>
-                          {req.csePriority || '—'}
-                        </span>
-                      </td>
-                      <td style={TD} onClick={e => e.stopPropagation()}>
-                        {isAdmin ? (
-                          <select
-                            value={req.requestStatus}
-                            onChange={e => handleStatusChange(req.id!, e.target.value as CseRequestStatus).catch(() => undefined)}
-                            style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                              background: statusStyle.bg, color: statusStyle.color,
-                              border: 'none', cursor: 'pointer' }}>
-                            {(['Pending','Accepted','Scheduled','In Progress','Complete','Declined','Needs Info','Cancelled'] as CseRequestStatus[])
-                              .map(s => <option key={s} value={s}>{s}</option>)}
-                          </select>
-                        ) : (
-                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                            background: statusStyle.bg, color: statusStyle.color }}>
-                            {req.requestStatus}
-                          </span>
-                        )}
-                      </td>
-                      <td style={TD}>
-                        <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                          background: schedStyle.bg, color: schedStyle.color }}>
-                          {req.scheduleStatus}
-                        </span>
-                        {!req.remoteTbd && req.remoteStart && (
-                          <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>
-                            Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}
-                          </div>
-                        )}
-                        {!req.onsiteTbd && req.onsiteStart && (
-                          <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>
-                            Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}
-                          </div>
-                        )}
-                      </td>
-                      <td style={TD} onClick={e => e.stopPropagation()}>
-                        {isAdmin ? (
-                          <select
-                            value={req.custTemp}
-                            onChange={e => handleCustTemp(req.id!, e.target.value).catch(() => undefined)}
-                            style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                              background: tempStyle.bg, color: tempStyle.color,
-                              border: 'none', cursor: 'pointer' }}>
-                            {(['Low','Normal','High','Critical']).map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        ) : (
-                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                            background: tempStyle.bg, color: tempStyle.color }}>
-                            {req.custTemp}
-                          </span>
-                        )}
-                      </td>
-                      <td style={TD} onClick={e => e.stopPropagation()}>
-                        {req.signedOffBy ? (
-                          <div style={{ fontSize: 11, color: '#107c10' }}>✓ {req.signedOffBy}</div>
-                        ) : req.requestStatus === 'Complete' ? (
-                          isAdmin && signOffId === req.id ? (
-                            <div>
-                              <input
-                                type="text"
-                                value={signOffName}
-                                onChange={e => setSignOffName(e.target.value)}
-                                placeholder="Your name"
-                                autoFocus
-                                style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }}
-                              />
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                  disabled={!signOffName.trim() || savingId === req.id}
-                                  onClick={() => handleSignOff(req.id!).catch(() => undefined)}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                  {savingId === req.id ? '…' : '✓ Confirm'}
-                                </button>
-                                <button
-                                  onClick={() => { setSignOffId(null); setSignOffName(''); }}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : isAdmin ? (
-                            <button
-                              onClick={() => { setSignOffId(req.id!); setSignOffName(''); }}
-                              style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                              Sign Off
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: 11, color: '#8a6000' }}>Pending</span>
-                          )
-                        ) : (
-                          <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ ...TD, fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>
-                        {fmtDate(req.modified || '') || '—'}
-                      </td>
-                      {isAdmin && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
-                        {req.requestStatus === 'Pending' && (
-                          decliningId === req.id ? (
-                            <div>
-                              <input
-                                type="text"
-                                value={declineNote}
-                                onChange={e => setDeclineNote(e.target.value)}
-                                placeholder="Reason (optional)"
-                                style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }}
-                              />
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                  disabled={savingId === req.id}
-                                  onClick={() => handleDeclineConfirm(req.id!)}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                  {savingId === req.id ? '…' : 'Confirm'}
-                                </button>
-                                <button
-                                  onClick={() => { setDecliningId(null); setDeclineNote(''); }}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : needsInfoId === req.id ? (
-                            <div>
-                              <input
-                                type="text"
-                                value={needsInfoNote}
-                                onChange={e => setNeedsInfoNote(e.target.value)}
-                                placeholder="What info is needed?"
-                                style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }}
-                              />
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                  disabled={savingId === req.id}
-                                  onClick={() => handleNeedsInfoConfirm(req.id!)}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                  {savingId === req.id ? '…' : 'Send'}
-                                </button>
-                                <button
-                                  onClick={() => { setNeedsInfoId(null); setNeedsInfoNote(''); }}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : reassignId === req.id ? (
-                            <div>
-                              <div style={{ fontSize: 10, color: '#605e5c', marginBottom: 3 }}>Enter new SSE as &ldquo;Name / email&rdquo;</div>
-                              <input
-                                type="text"
-                                value={reassignSse}
-                                onChange={e => setReassignSse(e.target.value)}
-                                placeholder="First Last / email@hpe.com"
-                                autoFocus
-                                style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }}
-                              />
-                              <div style={{ display: 'flex', gap: 4 }}>
-                                <button
-                                  disabled={savingId === req.id || !reassignSse.includes('/')}
-                                  onClick={() => handleReassignConfirm(req.id!)}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#0078d4', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                  {savingId === req.id ? '…' : 'Reassign'}
-                                </button>
-                                <button
-                                  onClick={() => { setReassignId(null); setReassignSse(''); }}
-                                  style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              <button
-                                disabled={savingId === req.id}
-                                onClick={() => handleAccept(req.id!)}
-                                style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                {savingId === req.id ? '…' : '✓ Accept'}
-                              </button>
-                              <button
-                                onClick={() => { setReassignId(req.id!); setReassignSse(''); }}
-                                style={{ fontSize: 11, padding: '4px 10px', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                ↔ Reassign
-                              </button>
-                              <button
-                                onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}
-                                style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                ? Info
-                              </button>
-                              <button
-                                onClick={() => { setDecliningId(req.id!); setDeclineNote(''); }}
-                                style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                ✕ Decline
-                              </button>
-                            </div>
-                          )
-                        )}
-                        {req.requestStatus !== 'Pending' && (
-                          <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
-                        )}
-                      </td>}
-                    </tr>
+                {/* ── Awaiting Acceptance ── */}
+                {!activeTile && pendingRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowPendingSection(s => !s)}>
+                    <td colSpan={isAdmin ? 12 : 11} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
+                      ⏳ Awaiting Acceptance ({pendingRows.length}) {showPendingSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showPendingSection && pendingRows.map((req, i) => renderRow(req, i, true))}
 
-                    {/* ── Expanded date drawer ── */}
-                    {isExpanded && dateEdit && (
-                      <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
-                        <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                {/* ── Active Engagements ── */}
+                {!activeTile && (
+                  <tr>
+                    <td colSpan={isAdmin ? 12 : 11} style={{ padding: '6px 12px', background: '#ebf3fc', fontWeight: 700, color: HPE_NAVY, fontSize: 12 }}>
+                      Active Engagements ({filteredRequests.length})
+                    </td>
+                  </tr>
+                )}
+                {filteredRequests.map((req, i) => renderRow(req, i))}
 
-                            {/* Remote section */}
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
-                                Remote Support
-                              </div>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 8, cursor: canEditDates ? 'pointer' : 'default' }}>
-                                <input type="checkbox" checked={dateEdit.remoteTbd}
-                                  disabled={!canEditDates}
-                                  onChange={e => setDateEdit(prev => prev ? { ...prev, remoteTbd: e.target.checked, remoteStart: '', remoteEnd: '' } : prev)} />
-                                TBD — dates not yet set
-                              </label>
-                              {!dateEdit.remoteTbd && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                                  <div>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Start</div>
-                                    <input type="date" value={dateEdit.remoteStart} disabled={!canEditDates}
-                                      onChange={e => setDateEdit(prev => prev ? { ...prev, remoteStart: e.target.value } : prev)}
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>End</div>
-                                    <input type="date" value={dateEdit.remoteEnd} disabled={!canEditDates}
-                                      onChange={e => setDateEdit(prev => prev ? { ...prev, remoteEnd: e.target.value } : prev)}
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
-                                  </div>
-                                  <div style={{ gridColumn: '1 / -1' }}>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Duration (e.g. 2 days)</div>
-                                    <input type="text" value={dateEdit.remoteDuration} disabled={!canEditDates}
-                                      onChange={e => setDateEdit(prev => prev ? { ...prev, remoteDuration: e.target.value } : prev)}
-                                      placeholder="e.g. 2 days"
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                {/* ── Completed & Awaiting Sign-off ── */}
+                {!activeTile && completedRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowCompletedSection(s => !s)}>
+                    <td colSpan={isAdmin ? 12 : 11} style={{ padding: '6px 12px', background: '#e8f5e9', fontWeight: 700, color: '#1a6b2e', fontSize: 12, userSelect: 'none' as const }}>
+                      ✓ Completed &amp; Awaiting Sign-off ({completedRows.length}){completedRows.filter(r => !r.signedOffBy).length > 0 ? ` · ${completedRows.filter(r => !r.signedOffBy).length} need sign-off` : ''} {showCompletedSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showCompletedSection && completedRows.map((req, i) => renderRow(req, i))}
 
-                            {/* Onsite section */}
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>
-                                On-Site Support
-                              </div>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 8, cursor: canEditDates ? 'pointer' : 'default' }}>
-                                <input type="checkbox" checked={dateEdit.onsiteTbd}
-                                  disabled={!canEditDates}
-                                  onChange={e => setDateEdit(prev => prev ? { ...prev, onsiteTbd: e.target.checked, onsiteStart: '', onsiteEnd: '' } : prev)} />
-                                TBD — dates not yet set
-                              </label>
-                              {!dateEdit.onsiteTbd && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                                  <div>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Start</div>
-                                    <input type="date" value={dateEdit.onsiteStart} disabled={!canEditDates}
-                                      onChange={e => {
-                                        const s = e.target.value;
-                                        setDateEdit(prev => prev ? { ...prev, onsiteStart: s, onsiteDuration: calcOnsiteDays(s, prev.onsiteEnd) } : prev);
-                                      }}
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>End</div>
-                                    <input type="date" value={dateEdit.onsiteEnd} disabled={!canEditDates}
-                                      onChange={e => {
-                                        const en = e.target.value;
-                                        setDateEdit(prev => prev ? { ...prev, onsiteEnd: en, onsiteDuration: calcOnsiteDays(prev.onsiteStart, en) } : prev);
-                                      }}
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Duration (auto-calculated)</div>
-                                    <input type="text" value={dateEdit.onsiteDuration} disabled={!canEditDates}
-                                      onChange={e => setDateEdit(prev => prev ? { ...prev, onsiteDuration: e.target.value } : prev)}
-                                      placeholder="Set dates above"
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box', background: '#f5f5f5' }} />
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>Destination</div>
-                                    <input type="text" value={dateEdit.onsiteDestination} disabled={!canEditDates}
-                                      onChange={e => setDateEdit(prev => prev ? { ...prev, onsiteDestination: e.target.value } : prev)}
-                                      placeholder="City, ST"
-                                      style={{ width: '100%', fontSize: 12, padding: '4px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' }} />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Opportunity + Notes */}
-                          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Opportunity</div>
-                              <textarea
-                                value={drawerOpportunity}
-                                onChange={e => setDrawerOpportunity(e.target.value)}
-                                rows={4}
-                                placeholder="Background, context, or opportunity details…"
-                                style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
-                              />
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Notes</div>
-                              <textarea
-                                value={drawerNotes}
-                                onChange={e => setDrawerNotes(e.target.value)}
-                                rows={4}
-                                placeholder="Running notes, date-tagged updates…"
-                                style={{ width: '100%', fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
-                              />
-                            </div>
-                          </div>
-                          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-                            <button
-                              disabled={savingNotes}
-                              onClick={() => handleSaveNotes(req.id!).catch(() => undefined)}
-                              style={{ padding: '5px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingNotes ? 0.6 : 1 }}>
-                              {savingNotes ? 'Saving…' : 'Save Notes'}
-                            </button>
-                          </div>
-
-                          {/* Action bar */}
-                          <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderTop: '1px solid #e0d8f0', paddingTop: 12 }}>
-
-                            {/* SE / admin: save dates */}
-                            {canEditDates && (
-                              <button
-                                disabled={savingDates}
-                                onClick={() => handleSaveDates(req).catch(() => undefined)}
-                                style={{ padding: '6px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingDates ? 0.6 : 1 }}>
-                                {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save (will flag as Rescheduling)' : 'Save Dates'}
-                              </button>
-                            )}
-
-                            {/* Admin / Charlie: confirm or decline proposed dates */}
-                            {showDateActions && !canEditDates === false && (
-                              declineDatesId === req.id ? (
-                                <>
-                                  <input type="text" value={declineDatesNote}
-                                    onChange={e => setDeclineDatesNote(e.target.value)}
-                                    placeholder="Reason dates don't work (optional)"
-                                    style={{ flex: 1, minWidth: 200, fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
-                                  <button disabled={savingDates}
-                                    onClick={() => handleDeclineDatesConfirm(req.id!).catch(() => undefined)}
-                                    style={{ padding: '5px 14px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                    {savingDates ? '…' : 'Confirm Decline'}
-                                  </button>
-                                  <button onClick={() => { setDeclineDatesId(null); setDeclineDatesNote(''); }}
-                                    style={{ padding: '5px 14px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
-                                    Cancel
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button disabled={savingDates}
-                                    onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
-                                    style={{ padding: '6px 18px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                    ✓ Confirm Dates
-                                  </button>
-                                  <button onClick={() => setDeclineDatesId(req.id!)}
-                                    style={{ padding: '6px 14px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                    ✕ Dates Don&apos;t Work
-                                  </button>
-                                </>
-                              )
-                            )}
-
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-                              {canCancel(req) && cancelId !== req.id && (
-                                <button
-                                  onClick={() => { setCancelId(req.id!); setCancelReason(''); setCancelNote(''); }}
-                                  style={{ padding: '5px 14px', background: '#fff', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                  Cancel Request
-                                </button>
-                              )}
-                              <button onClick={() => { setExpandedId(null); setDateEdit(null); setCancelId(null); }}
-                                style={{ padding: '5px 14px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
-                                Close
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Cancel confirmation section */}
-                          {cancelId === req.id && (
-                            <div style={{ marginTop: 12, padding: '14px 16px', background: '#fde7e9', border: '1px solid #a4262c', borderRadius: 6 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: '#a4262c', marginBottom: 10 }}>Cancel this SSE Request</div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                                <div>
-                                  <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>Reason <span style={{ color: '#a4262c' }}>*</span></div>
-                                  <select value={cancelReason} onChange={e => setCancelReason(e.target.value)}
-                                    style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
-                                    <option value="">— Select reason —</option>
-                                    {CANCEL_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                                  </select>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>Additional notes (optional)</div>
-                                  <input type="text" value={cancelNote} onChange={e => setCancelNote(e.target.value)}
-                                    placeholder="Any additional context..."
-                                    style={{ width: '100%', fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }} />
-                                </div>
-                              </div>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <button disabled={!cancelReason || savingDates}
-                                  onClick={() => handleCancelConfirm(req.id!).catch(() => undefined)}
-                                  style={{ padding: '6px 18px', background: cancelReason ? '#a4262c' : '#e0e0e0', color: cancelReason ? '#fff' : '#aaa', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: cancelReason ? 'pointer' : 'not-allowed' }}>
-                                  {savingDates ? 'Cancelling…' : 'Confirm Cancellation'}
-                                </button>
-                                <button onClick={() => { setCancelId(null); setCancelReason(''); setCancelNote(''); }}
-                                  style={{ padding: '6px 14px', background: '#fff', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
-                                  Never Mind
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {req.scheduleStatus !== 'TBD' && (
-                            <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
-                              Current schedule status: <strong>{req.scheduleStatus}</strong>
-                              {req.scheduleStatus === 'Dates Confirmed' && ' — saving new dates will flag this as Rescheduling and notify the SSE.'}
-                              {req.scheduleStatus === 'Dates Proposed' && ' — awaiting SSE confirmation.'}
-                              {req.scheduleStatus === 'Rescheduling' && ' — SSE declined the previous dates. Update and save to re-propose.'}
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                    </React.Fragment>
-                  );
-                })}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* ── Completed & Awaiting Sign-off ── */}
-        {!activeTile && completedRows.length > 0 && (
-          <div style={{ marginTop: 20, border: '1px solid #c3e6cb', borderRadius: 6, overflow: 'hidden' }}>
-            <div
-              onClick={() => setShowCompletedSection(s => !s)}
-              style={{ background: '#e8f5e9', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' as const }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#1a6b2e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Completed &amp; Awaiting Sign-off
-                </span>
-                <span style={{ fontSize: 11, background: HPE_GREEN, color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
-                  {completedRows.length}
-                </span>
-                {completedRows.filter(r => !r.signedOffBy).length > 0 && (
-                  <span style={{ fontSize: 11, background: '#8a6000', color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
-                    {completedRows.filter(r => !r.signedOffBy).length} need sign-off
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize: 12, color: '#1a6b2e' }}>{showCompletedSection ? '▲' : '▼'}</span>
-            </div>
-            {showCompletedSection && (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: '#f8fff9' }}>
-                    {(['Customer', 'SSE', 'Solutions', 'Sign-off', 'Date'] as const).map(h => (
-                      <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#1a6b2e', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {completedRows.map((req, ci) => (
-                    <tr key={req.id ?? ci} style={{ background: ci % 2 === 0 ? '#fff' : '#f5fff7', borderTop: '1px solid #e0f0e0' }}>
-                      <td style={{ padding: '7px 10px' }}>
-                        <div style={{ fontWeight: 600 }}>{req.customerName || '—'}</div>
-                        {req.pocName && <div style={{ fontSize: 11, color: '#888' }}>{req.pocName}</div>}
-                      </td>
-                      <td style={{ padding: '7px 10px' }}>
-                        {parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse) || '—'}
-                      </td>
-                      <td style={{ padding: '7px 10px', fontSize: 11, color: '#555' }}>{codeToName(req.solutionsFocus)}</td>
-                      <td style={{ padding: '7px 10px' }} onClick={e => e.stopPropagation()}>
-                        {req.signedOffBy ? (
-                          <div style={{ fontSize: 11, color: '#107c10', fontWeight: 600 }}>✓ {req.signedOffBy}</div>
-                        ) : isAdmin && signOffId === req.id ? (
-                          <div>
-                            <input
-                              type="text"
-                              value={signOffName}
-                              onChange={e => setSignOffName(e.target.value)}
-                              placeholder="Your name"
-                              autoFocus
-                              style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }}
-                            />
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              <button
-                                disabled={!signOffName.trim() || savingId === req.id}
-                                onClick={() => handleSignOff(req.id!).catch(() => undefined)}
-                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                                {savingId === req.id ? '…' : '✓ Confirm'}
-                              </button>
-                              <button
-                                onClick={() => { setSignOffId(null); setSignOffName(''); }}
-                                style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : isAdmin ? (
-                          <button
-                            onClick={() => { setSignOffId(req.id!); setSignOffName(''); }}
-                            style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
-                            Sign Off
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: 11, color: '#8a6000' }}>Awaiting Sign-off</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '7px 10px', color: '#888', whiteSpace: 'nowrap' }}>{fmtDate(req.signOffDate)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
       </div>
 
     </div>
