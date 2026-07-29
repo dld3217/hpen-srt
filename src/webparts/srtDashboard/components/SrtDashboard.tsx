@@ -107,7 +107,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterRegion, setFilterRegion]         = useState('All');
   const [filterPriority, setFilterPriority]     = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
-  const [showCompleted, setShowCompleted]       = useState(true);
+  const [showPendingSection, setShowPendingSection]     = useState(true);
+  const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
   const [activeTile, setActiveTile]             = useState<string | null>(null);
@@ -352,11 +353,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     return visibleRequests;
   })();
 
-  const hideSignedOff = !showCompleted && activeTile !== 'Complete';
-  const hiddenSignedOffCount = hideSignedOff ? tileFiltered.filter(r => !!r.signedOffBy).length : 0;
+  const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
+  const completedRows = visibleRequests.filter(r => !!r.signedOffBy);
 
   const filteredRequests = tileFiltered.filter(r => {
-    if (hideSignedOff && !!r.signedOffBy) return false;
+    if (!activeTile && r.requestStatus === 'Pending') return false;
+    if (!activeTile && !!r.signedOffBy) return false;
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
@@ -500,8 +502,127 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
       {/* Request table */}
       <div ref={tableRef} style={{ padding: '16px 20px' }}>
+
+        {/* ── Awaiting Acceptance ── */}
+        {!activeTile && pendingRows.length > 0 && (
+          <div style={{ marginBottom: 16, border: '1px solid #ffd780', borderRadius: 6, overflow: 'hidden' }}>
+            <div
+              onClick={() => setShowPendingSection(s => !s)}
+              style={{ background: '#fff4ce', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' as const }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 3, height: 14, background: '#8a6000', borderRadius: 2 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#8a6000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Awaiting Acceptance
+                </span>
+                <span style={{ fontSize: 11, background: '#8a6000', color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
+                  {pendingRows.length}
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: '#8a6000' }}>{showPendingSection ? '▲' : '▼'}</span>
+            </div>
+            {showPendingSection && pendingRows.map((req, pi) => (
+              <div key={req.id ?? pi}
+                   style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', borderTop: '1px solid #ffd780', background: pi % 2 === 0 ? '#fffdf5' : '#fff8e8', flexWrap: 'wrap' }}>
+                <div style={{ flex: '2 1 160px', minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{req.customerName || '—'}</div>
+                  <div style={{ fontSize: 11, color: '#888' }}>{req.hpenBusinessUnit} · {req.buRegion}</div>
+                  {req.pocName && <div style={{ fontSize: 11, color: '#aaa' }}>{req.pocName}</div>}
+                </div>
+                <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>SE</div>
+                  <div style={{ fontSize: 12 }}>{parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || '—'}</div>
+                </div>
+                <div style={{ flex: '1 1 100px', minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>SSE Requested</div>
+                  <div style={{ fontSize: 12 }}>{parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse) || 'Unassigned'}</div>
+                </div>
+                <div style={{ flex: '0 0 auto', alignSelf: 'flex-start', paddingTop: 2 }}>
+                  <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                    background: req.csePriority === 'Critical' ? '#a4262c' : req.csePriority === 'High' ? '#fde7e9' : req.csePriority === 'Medium' ? '#fff4ce' : '#e8faf3',
+                    color: req.csePriority === 'Critical' ? '#fff' : req.csePriority === 'High' ? '#a4262c' : req.csePriority === 'Medium' ? '#8a6000' : '#107c10' }}>
+                    {req.csePriority || '—'}
+                  </span>
+                </div>
+                {isAdmin && (
+                  <div style={{ flex: '0 0 auto' }} onClick={e => e.stopPropagation()}>
+                    {decliningId === req.id ? (
+                      <div>
+                        <input type="text" value={declineNote} onChange={e => setDeclineNote(e.target.value)}
+                          placeholder="Reason (optional)"
+                          style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }} />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button disabled={savingId === req.id} onClick={() => handleDeclineConfirm(req.id!)}
+                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                            {savingId === req.id ? '…' : 'Confirm'}
+                          </button>
+                          <button onClick={() => { setDecliningId(null); setDeclineNote(''); }}
+                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : needsInfoId === req.id ? (
+                      <div>
+                        <input type="text" value={needsInfoNote} onChange={e => setNeedsInfoNote(e.target.value)}
+                          placeholder="What info is needed?"
+                          style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }} />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button disabled={savingId === req.id} onClick={() => handleNeedsInfoConfirm(req.id!)}
+                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                            {savingId === req.id ? '…' : 'Send'}
+                          </button>
+                          <button onClick={() => { setNeedsInfoId(null); setNeedsInfoNote(''); }}
+                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : reassignId === req.id ? (
+                      <div>
+                        <div style={{ fontSize: 10, color: '#605e5c', marginBottom: 3 }}>Enter new SSE as &ldquo;Name / email&rdquo;</div>
+                        <input type="text" value={reassignSse} onChange={e => setReassignSse(e.target.value)}
+                          placeholder="First Last / email@hpe.com" autoFocus
+                          style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' as const }} />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button disabled={savingId === req.id || !reassignSse.includes('/')} onClick={() => handleReassignConfirm(req.id!)}
+                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#0078d4', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                            {savingId === req.id ? '…' : 'Reassign'}
+                          </button>
+                          <button onClick={() => { setReassignId(null); setReassignSse(''); }}
+                            style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <button disabled={savingId === req.id} onClick={() => handleAccept(req.id!)}
+                          style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                          {savingId === req.id ? '…' : '✓ Accept'}
+                        </button>
+                        <button onClick={() => { setReassignId(req.id!); setReassignSse(''); }}
+                          style={{ fontSize: 11, padding: '4px 10px', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                          ↔ Reassign
+                        </button>
+                        <button onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}
+                          style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                          ? Info
+                        </button>
+                        <button onClick={() => { setDecliningId(req.id!); setDeclineNote(''); }}
+                          style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                          ✕ Decline
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 6 }}>
-          {activeTile ? activeTile : isAdmin ? 'All Requests' : 'My Requests'} ({filteredRequests.length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
+          {activeTile ? activeTile : 'Active Engagements'} ({filteredRequests.length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
         </div>
 
         {/* Filter bar */}
@@ -538,18 +659,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
-            </button>
-          )}
-          {hiddenSignedOffCount > 0 && (
-            <button onClick={() => setShowCompleted(true)}
-              style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #d4d4d4', borderRadius: 4, cursor: 'pointer', color: '#605e5c', marginLeft: 'auto' }}>
-              Show Completed ({hiddenSignedOffCount})
-            </button>
-          )}
-          {showCompleted && activeTile !== 'Complete' && (
-            <button onClick={() => setShowCompleted(false)}
-              style={{ fontSize: 11, padding: '5px 10px', background: '#e8f5e9', border: `1px solid ${HPE_GREEN}`, borderRadius: 4, cursor: 'pointer', color: '#1a6b2e', marginLeft: 'auto' }}>
-              Hide Completed
             </button>
           )}
         </div>
@@ -1114,6 +1223,53 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ── Completed / signed-off ── */}
+        {!activeTile && completedRows.length > 0 && (
+          <div style={{ marginTop: 20, border: '1px solid #c3e6cb', borderRadius: 6, overflow: 'hidden' }}>
+            <div
+              onClick={() => setShowCompletedSection(s => !s)}
+              style={{ background: '#e8f5e9', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' as const }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#1a6b2e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Completed
+                </span>
+                <span style={{ fontSize: 11, background: HPE_GREEN, color: '#fff', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>
+                  {completedRows.length}
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: '#1a6b2e' }}>{showCompletedSection ? '▲' : '▼'}</span>
+            </div>
+            {showCompletedSection && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#f8fff9' }}>
+                    {(['Customer', 'SSE', 'Solutions', 'Signed Off By', 'Date'] as const).map(h => (
+                      <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 600, color: '#1a6b2e', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {completedRows.map((req, ci) => (
+                    <tr key={req.id ?? ci} style={{ background: ci % 2 === 0 ? '#fff' : '#f5fff7', borderTop: '1px solid #e0f0e0' }}>
+                      <td style={{ padding: '7px 10px' }}>
+                        <div style={{ fontWeight: 600 }}>{req.customerName || '—'}</div>
+                        {req.pocName && <div style={{ fontSize: 11, color: '#888' }}>{req.pocName}</div>}
+                      </td>
+                      <td style={{ padding: '7px 10px' }}>
+                        {parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse) || '—'}
+                      </td>
+                      <td style={{ padding: '7px 10px', fontSize: 11, color: '#555' }}>{codeToName(req.solutionsFocus)}</td>
+                      <td style={{ padding: '7px 10px', color: '#107c10', fontWeight: 600 }}>✓ {req.signedOffBy}</td>
+                      <td style={{ padding: '7px 10px', color: '#888', whiteSpace: 'nowrap' }}>{fmtDate(req.signOffDate)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </div>
