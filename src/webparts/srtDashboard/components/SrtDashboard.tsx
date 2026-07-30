@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.46';
+const VERSION = '1.0.47';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -117,6 +117,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [drawerOpportunity, setDrawerOpportunity] = useState('');
   const [drawerNotes, setDrawerNotes]             = useState('');
   const [savingNotes, setSavingNotes]             = useState(false);
+  const [urlActionBanner, setUrlActionBanner]     = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const tableRef                                = useRef<HTMLDivElement>(null);
 
   const userEmail    = context.pageContext.user.email.toLowerCase();
@@ -132,6 +133,45 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       .then(([all, admin]) => { setRequests(all); setIsAdmin(admin); setLoading(false); })
       .catch(err => { setError(String(err)); setLoading(false); });
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    const requestId = parseInt(params.get('requestId') || '0', 10);
+    if (!action || !requestId) return;
+    const req = requests.find(r => r.id === requestId);
+    if (!req) {
+      setUrlActionBanner({ msg: `Request #${requestId} not found or not accessible.`, type: 'err' });
+      return;
+    }
+    const svc = new CseRequestService(sp);
+    if (action === 'accept') {
+      svc.updateStatus(requestId, 'Accepted')
+        .then(() => {
+          setRequests(prev => prev.map(r => r.id === requestId ? { ...r, requestStatus: 'Accepted' } : r));
+          setUrlActionBanner({ msg: `✓ Request #${requestId} — ${req.customerName} accepted successfully.`, type: 'ok' });
+        })
+        .catch(e => setUrlActionBanner({ msg: `Accept failed: ${(e as Error).message}`, type: 'err' }));
+    } else if (action === 'decline') {
+      svc.updateStatus(requestId, 'Declined')
+        .then(() => {
+          setRequests(prev => prev.map(r => r.id === requestId ? { ...r, requestStatus: 'Declined' } : r));
+          setUrlActionBanner({ msg: `Request #${requestId} — ${req.customerName} declined.`, type: 'ok' });
+        })
+        .catch(e => setUrlActionBanner({ msg: `Decline failed: ${(e as Error).message}`, type: 'err' }));
+    } else if (action === 'info') {
+      svc.updateStatus(requestId, 'Needs Info')
+        .then(() => {
+          setRequests(prev => prev.map(r => r.id === requestId ? { ...r, requestStatus: 'Needs Info' } : r));
+          setUrlActionBanner({ msg: `Request #${requestId} — ${req.customerName} marked Needs Info.`, type: 'ok' });
+        })
+        .catch(e => setUrlActionBanner({ msg: `Update failed: ${(e as Error).message}`, type: 'err' }));
+    } else if (action === 'reassign') {
+      setReassignId(requestId);
+      setUrlActionBanner({ msg: `Use the reassign input to assign a new SSE for request #${requestId} — ${req.customerName}.`, type: 'ok' });
+    }
+  }, [loading]);
 
   const handleAccept = async (id: number): Promise<void> => {
     setSavingId(id);
@@ -769,6 +809,22 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     <div style={{ fontFamily: 'inherit', minHeight: 400 }}>
 
       {showAdmin && <SrtAdminPanel sp={sp} context={context} onClose={() => setShowAdmin(false)} />}
+
+      {/* URL action result banner */}
+      {urlActionBanner && (
+        <div style={{
+          margin: '10px 20px 0', padding: '10px 14px', borderRadius: 4, fontSize: 13,
+          background: urlActionBanner.type === 'ok' ? '#dff6dd' : '#fde7e9',
+          color: urlActionBanner.type === 'ok' ? '#107c10' : '#a4262c',
+          border: `1px solid ${urlActionBanner.type === 'ok' ? '#107c10' : '#a4262c'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+        }}>
+          <span>{urlActionBanner.msg}</span>
+          <button onClick={() => setUrlActionBanner(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+              color: urlActionBanner.type === 'ok' ? '#107c10' : '#a4262c', padding: '0 2px' }}>✕</button>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

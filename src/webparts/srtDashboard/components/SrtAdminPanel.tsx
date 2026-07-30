@@ -32,6 +32,10 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
   const [usersLoading, setUsersLoading] = useState(true);
   const [saving, setSaving]         = useState(false);
 
+  // ── SED Bypass ───────────────────────────────────────────────────────────────
+  const [sedApprovalRequired, setSedApprovalRequired] = useState(true);
+  const [sedSaving, setSedSaving]   = useState(false);
+
   // ── SSE Teams ────────────────────────────────────────────────────────────
   const [sseTeams, setSseTeams]         = useState<ISSETeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(true);
@@ -77,6 +81,9 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
     configSvc.getSSETeams()
       .then(t => { setSseTeams(t); setTeamsLoading(false); })
       .catch(() => setTeamsLoading(false));
+    configSvc.getSEDApprovalRequired()
+      .then(r => setSedApprovalRequired(r))
+      .catch(() => undefined);
   }, []);
 
   // ── Super User actions ────────────────────────────────────────────────────
@@ -101,6 +108,23 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
   const removeUser = (email: string): void => {
     if (email === myEmail) { showMsg('You cannot remove yourself.', 'err'); return; }
     saveUsers(superUsers.filter(u => u !== email)).catch(() => undefined);
+  };
+
+  // ── SED Bypass actions ────────────────────────────────────────────────────
+  const toggleSedApproval = async (required: boolean): Promise<void> => {
+    setSedSaving(true);
+    try {
+      await configSvc.saveSEDApprovalRequired(required);
+      setSedApprovalRequired(required);
+      showMsg(
+        required
+          ? 'SED approval re-enabled — new requests will be held Pending.'
+          : 'SED approval bypassed — new requests route directly to the SSE.',
+        'ok'
+      );
+    } catch (e) {
+      showMsg(`Save failed: ${(e as Error).message}`, 'err');
+    } finally { setSedSaving(false); }
   };
 
   // ── BU Config actions ─────────────────────────────────────────────────────
@@ -278,6 +302,30 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
                     opacity: saving || !newEmail.trim() ? 0.6 : 1 }}>
                   {saving ? '…' : 'Add'}
                 </button>
+              </div>
+
+              {/* Workflow Settings */}
+              <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #edebe9' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 4 }}>
+                  Workflow Settings
+                </div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: sedSaving ? 'not-allowed' : 'pointer' }}>
+                  <input type="checkbox" checked={sedApprovalRequired} disabled={sedSaving}
+                    onChange={e => toggleSedApproval(e.target.checked).catch(() => undefined)}
+                    style={{ accentColor: HPE_NAVY, width: 14, height: 14, marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#323130' }}>Require SED/GM approval</div>
+                    <div style={{ fontSize: 11, color: '#605e5c', marginTop: 2, lineHeight: 1.4 }}>
+                      When enabled, new requests are held <strong>Pending</strong> until a SED accepts them.
+                      When disabled, requests route directly to the SSE as <strong>Accepted</strong>.
+                    </div>
+                    {!sedApprovalRequired && (
+                      <div style={{ marginTop: 6, fontSize: 11, color: '#d83b01', fontWeight: 600 }}>
+                        ⚠ Bypass is active — SED approval is skipped for all new requests.
+                      </div>
+                    )}
+                  </div>
+                </label>
               </div>
             </>
           )}

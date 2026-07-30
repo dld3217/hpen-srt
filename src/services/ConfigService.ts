@@ -144,6 +144,31 @@ export class ConfigService {
     }
   }
 
+  public async getSEDApprovalRequired(): Promise<boolean> {
+    try {
+      const items: { Value: string }[] = await this._sp.web.lists
+        .getByTitle('AppConfig').items
+        .filter("Title eq 'SEDApprovalRequired'").select('Value')();
+      if (items.length > 0 && items[0].Value !== '') {
+        return items[0].Value !== 'false';
+      }
+    } catch { /* fall through */ }
+    return true;
+  }
+
+  public async saveSEDApprovalRequired(required: boolean): Promise<void> {
+    const items: { Id: number }[] = await this._sp.web.lists
+      .getByTitle('AppConfig').items
+      .filter("Title eq 'SEDApprovalRequired'").select('Id')();
+    if (items.length > 0) {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .getById(items[0].Id).update({ Value: required ? 'true' : 'false' });
+    } else {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .add({ Title: 'SEDApprovalRequired', Value: required ? 'true' : 'false' });
+    }
+  }
+
   public async getBURegions(): Promise<BURegionMap> {
     try {
       const items: { Value: string }[] = await this._sp.web.lists

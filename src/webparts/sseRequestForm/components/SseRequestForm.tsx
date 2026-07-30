@@ -72,7 +72,7 @@ const EMPTY_FORM: ISseFormData = {
   additionalSpecialty2: '',
 };
 
-const VERSION = '1.0.43';
+const VERSION = '1.0.44';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -327,6 +327,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   const [buRegions, setBuRegions]   = useState<BURegionMap>({});
   const [solutions, setSolutions]   = useState<ISolutionDef[]>(SOLUTIONS);
   const [sseTeams, setSseTeams]     = useState<ISSETeam[]>([]);
+  const [sedApprovalRequired, setSedApprovalRequired] = useState(true);
   const [formData, setFormData]     = useState<ISseFormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted]   = useState(false);
@@ -338,11 +339,12 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
   useEffect(() => {
     const configSvc = new ConfigService(sp);
-    Promise.all([configSvc.getBURegions(), configSvc.getSolutions(), configSvc.getSSETeams()])
-      .then(([bur, sols, teams]) => {
+    Promise.all([configSvc.getBURegions(), configSvc.getSolutions(), configSvc.getSSETeams(), configSvc.getSEDApprovalRequired()])
+      .then(([bur, sols, teams, sedRequired]) => {
         setBuRegions(bur);
         setSolutions(sols);
         setSseTeams(teams);
+        setSedApprovalRequired(sedRequired);
         const savedBU = localStorage.getItem('srt_bu') || '';
         const savedRegion = localStorage.getItem('srt_region') || '';
         if (savedBU && bur[savedBU]) {
@@ -403,7 +405,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       const basePayload = {
         source: 'SE Landing Page' as const,
         linkedPocId: 0,
-        requestStatus: 'Pending' as const,
+        requestStatus: sedApprovalRequired ? 'Pending' as const : 'Accepted' as const,
         scheduleStatus: schedStatus,
         sseManagerEmail,
         cseDescription: formData.notes,
