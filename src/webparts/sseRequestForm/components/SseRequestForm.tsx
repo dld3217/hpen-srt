@@ -1,10 +1,11 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { SPFI, PrincipalType, PrincipalSource } from '@pnp/sp';
+import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
-import '@pnp/sp/sputilities';
+import { MSGraphClientV3 } from '@microsoft/sp-http';
 import { Spinner, SpinnerSize } from '@fluentui/react';
-import { ConfigService, BURegionMap, IBUConfig, ISSETeam } from '../../../services/ConfigService';
+import { ConfigService, BURegionMap, IBUConfig, IRegionConfig, ISSETeam } from '../../../services/ConfigService';
+import { ContactDirectoryService, IContact } from '../../../services/ContactDirectoryService';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
@@ -41,6 +42,7 @@ interface ISseFormData {
   additionalSpecialty: string;
   additionalSse2: string;
   additionalSpecialty2: string;
+  extraSses: string[];
 }
 
 const EMPTY_FORM: ISseFormData = {
@@ -70,9 +72,10 @@ const EMPTY_FORM: ISseFormData = {
   additionalSpecialty: '',
   additionalSse2: '',
   additionalSpecialty2: '',
+  extraSses: [],
 };
 
-const VERSION = '1.0.44';
+const VERSION = '1.0.61';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -83,9 +86,7 @@ const greeting = (): string => {
 
 const firstName = (displayName: string): string => {
   if (!displayName) return '';
-  // Handle "Last, First Middle" enterprise AD format
   if (displayName.includes(',')) return displayName.split(',')[1].trim().split(' ')[0];
-  // Handle "First Last" standard format
   return displayName.split(' ')[0];
 };
 
@@ -95,19 +96,11 @@ const emailToName = (email: string): string => {
   return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-
-// ── Inline styles ─────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 
 const SECTION: React.CSSProperties = {
   background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6,
-  padding: '16px 20px', marginBottom: 14,
-};
-const SECTION_TITLE: React.CSSProperties = {
-  fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase',
-  letterSpacing: '0.6px', marginBottom: 12, borderBottom: `2px solid ${HPE_GREEN}`,
-  paddingBottom: 6,
+  padding: '14px 18px', marginBottom: 12,
 };
 const FIELD_ROW: React.CSSProperties = { marginBottom: 10 };
 const LABEL_STYLE: React.CSSProperties = {
@@ -124,6 +117,15 @@ const TOGGLE_BTN = (active: boolean): React.CSSProperties => ({
   color: active ? '#fff' : '#605e5c',
   cursor: 'pointer',
 });
+
+// ── SectionHeader ─────────────────────────────────────────────────────────────
+
+const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, paddingBottom: 6, borderBottom: `2px solid ${HPE_GREEN}` }}>
+    <div style={{ width: 3, height: 16, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
+    <span style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{title}</span>
+  </div>
+);
 
 // ── PeoplePickerField ─────────────────────────────────────────────────────────
 
@@ -176,6 +178,7 @@ const PeoplePickerField: React.FC<{
 
   const handleBlur = (e: React.FocusEvent<HTMLDivElement>): void => {
     if (containerRef.current?.contains(e.relatedTarget as Node)) return;
+    if (!editing) return;
     onChange(localValue.trim());
     setEditing(false);
     setResults([]);
@@ -186,11 +189,15 @@ const PeoplePickerField: React.FC<{
     <div ref={containerRef} onBlur={handleBlur} style={FIELD_ROW}>
       <label style={LABEL_STYLE}>{label}{required && <span style={{ color: '#d13438' }}> *</span>}</label>
       {showDisplay ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: '#f3f2f1', borderRadius: 3, border: '1px solid #ccc', cursor: 'pointer' }}
-          onClick={startEdit}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>{namePart}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: '#f3f2f1', borderRadius: 3, border: '1px solid #ccc' }}>
+          <a href={`mailto:${emailPart}`} style={{ fontWeight: 600, fontSize: 13, color: '#0078d4', textDecoration: 'none' }}>{namePart}</a>
           <span style={{ fontSize: 11, color: '#605e5c' }}>{emailPart}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#0078d4' }}>✎ Change</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button type="button" onClick={startEdit}
+              style={{ fontSize: 11, color: '#0078d4', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✎ Change</button>
+            <button type="button" onClick={() => onChange('')}
+              style={{ fontSize: 11, color: '#a4262c', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+          </span>
         </div>
       ) : (
         <div style={{ position: 'relative' }}>
@@ -266,73 +273,67 @@ const ScheduleBlock: React.FC<{
   };
   const fromInput = (val: string): string => val ? new Date(val).toISOString() : '';
   return (
-  <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', margin: 0 }}>
-        <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
-        Dates TBD
-      </label>
-    </div>
-    {!tbd && (
-      <>
+    <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', margin: 0 }}>
+          <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
+          Dates TBD
+        </label>
+      </div>
+      {!tbd && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
           <div>
             <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Start</label>
             <input type={dateOnly ? 'date' : 'datetime-local'} value={toInput(start)}
-              onChange={e => {
-                const newStart = fromInput(e.target.value);
-                onStart(newStart);
-                if (newStart && end) onDuration(calcDuration(newStart, end));
-              }} style={INPUT} />
+              onChange={e => { const s = fromInput(e.target.value); onStart(s); if (s && end) onDuration(calcDuration(s, end)); }} style={INPUT} />
           </div>
           <div>
             <label style={{ ...LABEL_STYLE, fontSize: 11 }}>End</label>
             <input type={dateOnly ? 'date' : 'datetime-local'} value={toInput(end)}
-              onChange={e => {
-                const newEnd = fromInput(e.target.value);
-                onEnd(newEnd);
-                if (start && newEnd) onDuration(calcDuration(start, newEnd));
-              }} style={INPUT} />
+              onChange={e => { const en = fromInput(e.target.value); onEnd(en); if (start && en) onDuration(calcDuration(start, en)); }} style={INPUT} />
           </div>
           <button type="button" onClick={() => { onTbd(true); onStart(''); onEnd(''); onDuration(''); }}
             title="Clear dates"
             style={{ height: 32, padding: '0 10px', fontSize: 16, lineHeight: 1, background: 'transparent',
-              border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c', marginBottom: 1 }}>
-            ✕
-          </button>
+              border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c', marginBottom: 1 }}>✕</button>
         </div>
-      </>
-    )}
-    <div>
-      <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
-      <input type="text" value={duration} onChange={e => onDuration(e.target.value)}
-        placeholder="e.g. 2 hours, half day, 3 days" style={INPUT} />
-    </div>
-    {onDestination !== undefined && (
-      <div style={{ marginTop: 8 }}>
-        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Destination</label>
-        <input type="text" value={destination || ''} onChange={e => onDestination(e.target.value)}
-          placeholder="e.g. Denver, CO" style={INPUT} />
+      )}
+      <div>
+        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
+        <input type="text" value={duration} onChange={e => onDuration(e.target.value)}
+          placeholder="e.g. 2 hours, half day, 3 days" style={INPUT} />
       </div>
-    )}
-  </div>
+      {onDestination !== undefined && (
+        <div style={{ marginTop: 8 }}>
+          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Destination</label>
+          <input type="text" value={destination || ''} onChange={e => onDestination(e.target.value)}
+            placeholder="e.g. Denver, CO" style={INPUT} />
+        </div>
+      )}
+    </div>
   );
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) => {
-  const [loading, setLoading]       = useState(true);
-  const [buRegions, setBuRegions]   = useState<BURegionMap>({});
-  const [solutions, setSolutions]   = useState<ISolutionDef[]>(SOLUTIONS);
-  const [sseTeams, setSseTeams]     = useState<ISSETeam[]>([]);
+  const [loading, setLoading]               = useState(true);
+  const [buRegions, setBuRegions]           = useState<BURegionMap>({});
+  const [solutions, setSolutions]           = useState<ISolutionDef[]>(SOLUTIONS);
+  const [sseTeams, setSseTeams]             = useState<ISSETeam[]>([]);
   const [sedApprovalRequired, setSedApprovalRequired] = useState(true);
-  const [formData, setFormData]     = useState<ISseFormData>(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted]   = useState(false);
-  const [submitError, setSubmitError] = useState('');
+  const [formData, setFormData]             = useState<ISseFormData>(EMPTY_FORM);
+  const [submitting, setSubmitting]         = useState(false);
+  const [submitted, setSubmitted]           = useState(false);
+  const [submitError, setSubmitError]       = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  // Contact Directory state
+  const [contacts, setContacts]                   = useState<IContact[]>([]);
+  const [contactsLoaded, setContactsLoaded]       = useState(false);
+  const [contactsLoading, setContactsLoading]     = useState(false);
+  const [dismissedIds, setDismissedIds]           = useState<Set<number>>(new Set());
+  const [expandedIds, setExpandedIds]             = useState<Set<number>>(new Set());
 
   const userEmail       = context.pageContext.user.email;
   const userDisplayName = context.pageContext.user.displayName || userEmail;
@@ -361,27 +362,62 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
   const handleSearchUsers = async (query: string): Promise<IGraphUser[]> => {
     try {
-      const results = await sp.utility.searchPrincipals(
-        query, PrincipalType.User, PrincipalSource.All, '', 10
-      );
-      return results
-        .filter(r => r.Email)
-        .map(r => ({ displayName: r.DisplayName, mail: r.Email }));
-    } catch (err) {
-      console.error('[SRT] People picker exception:', err);
+      const client: MSGraphClientV3 = await context.msGraphClientFactory.getClient('3');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response: any = await client.api('/users')
+        .header('ConsistencyLevel', 'eventual')
+        .search(`"displayName:${query.replace(/"/g, '')}"`)
+        .select('displayName,mail')
+        .top(10)
+        .get();
+      interface IGraphResult { displayName?: string; mail?: string; }
+      return ((response.value || []) as IGraphResult[])
+        .filter(u => !!u.mail)
+        .map(u => ({ displayName: (u.displayName || '') as string, mail: (u.mail || '') as string }));
+    } catch {
       return [];
     }
   };
 
+  const handleFindResources = async (): Promise<void> => {
+    setContactsLoading(true);
+    setDismissedIds(new Set());
+    try {
+      const svc = new ContactDirectoryService(context);
+      const all = await svc.getAll();
+      setContacts(all);
+      setContactsLoaded(true);
+    } catch {
+      setContactsLoaded(true);
+    } finally {
+      setContactsLoading(false);
+    }
+  };
+
+  // Match category keyword to an SSE team name
+  const matchTeam = (cat: string): string => {
+    const lower = cat.toLowerCase();
+    const found = sseTeams.find(t => {
+      const tn = t.name.toLowerCase();
+      if (lower.includes('mist') && tn.includes('mist')) return true;
+      if ((lower.includes('datacenter') || lower.includes('data center') || lower.includes('dcn')) && (tn.includes('dcn') || tn.includes('data'))) return true;
+      if ((lower.includes('routing') || lower.includes('ris')) && (tn.includes('routing') || tn.includes('ris'))) return true;
+      if (lower.includes('sase') && tn.includes('sase')) return true;
+      if (lower.includes('aiops') && tn.includes('aiops')) return true;
+      return false;
+    });
+    return found?.name || '';
+  };
+
   const validate = (): string[] => {
     const errs: string[] = [];
-    if (!formData.customerName.trim())   errs.push('Customer Name is required.');
-    if (!formData.hpenBusinessUnit)       errs.push('Business Unit is required.');
-    if (!formData.buRegion)               errs.push('Region is required.');
-    if (!formData.requestedSse.includes('/')) errs.push('Requested SSE is required — search and select a person.');
-    if (!formData.supportType)            errs.push('Support Type is required.');
-    if (!formData.csePriority)            errs.push('Priority is required.');
-    if (!formData.notes.trim())           errs.push('Notes is required.');
+    if (!formData.customerName.trim())          errs.push('Customer Name is required.');
+    if (!formData.hpenBusinessUnit)             errs.push('Business Unit is required.');
+    if (!formData.buRegion)                     errs.push('Region is required.');
+    if (!formData.requestedSse.includes('/'))   errs.push('Requested SSE is required — search and select a person.');
+    if (!formData.supportType)                  errs.push('Support Type is required.');
+    if (!formData.csePriority)                  errs.push('Priority is required.');
+    if (!formData.notes.trim())                 errs.push('Notes is required.');
     return errs;
   };
 
@@ -393,14 +429,14 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     setSubmitError('');
 
     try {
-      const buConfig       = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
-      const buSedEmail     = buConfig?.sedEmail || '';
-      const regionCfg      = buConfig?.regions[formData.buRegion] || {};
-      const semEmail       = regionCfg.semEmail || '';
-      const activeTeam     = sseTeams.find(t => t.name === formData.specialtyType);
-      const sedEmail       = activeTeam?.managerEmail || buSedEmail;
+      const buConfig        = buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined;
+      const buSedEmail      = buConfig?.sedEmail || '';
+      const regionCfg: IRegionConfig = buConfig?.regions[formData.buRegion] || {};
+      const semEmail        = regionCfg.semEmail || '';
+      const activeTeam      = sseTeams.find(t => t.name === formData.specialtyType);
+      const sedEmail        = activeTeam?.managerEmail || buSedEmail;
       const sseManagerEmail = activeTeam?.managerEmail || '';
-      const schedStatus    = (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' as const : 'Dates Proposed' as const;
+      const schedStatus     = (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' as const : 'Dates Proposed' as const;
 
       const basePayload = {
         source: 'SE Landing Page' as const,
@@ -441,7 +477,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       const svc = new CseRequestService(sp);
       await svc.create({ ...basePayload, title: `${formData.customerName} — SSE Request`, requestedCse: formData.requestedSse });
 
-      if (formData.additionalResourceNeeded && formData.additionalSse.includes('/')) {
+      if (formData.additionalSse.includes('/')) {
         const addlTeam1 = sseTeams.find(t => t.name === formData.additionalSpecialty);
         await svc.create({
           ...basePayload,
@@ -453,7 +489,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         });
       }
 
-      if (formData.additionalResourceNeeded && formData.additionalSse2.includes('/')) {
+      if (formData.additionalSse2.includes('/')) {
         const addlTeam2 = sseTeams.find(t => t.name === formData.additionalSpecialty2);
         await svc.create({
           ...basePayload,
@@ -465,6 +501,19 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         });
       }
 
+      for (let i = 0; i < formData.extraSses.length; i++) {
+        if (formData.extraSses[i].includes('/')) {
+          await svc.create({
+            ...basePayload,
+            title: `${formData.customerName} — SSE Request (Additional Resource ${i + 3})`,
+            requestedCse: formData.extraSses[i],
+            sedEmail: buSedEmail,
+            sseManagerEmail: '',
+            specialtyType: '',
+          });
+        }
+      }
+
       setSubmitted(true);
     } catch (err) {
       setSubmitError(`Submit failed: ${(err as Error)?.message || String(err)}`);
@@ -473,16 +522,25 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     }
   };
 
-  const buKeys     = Object.keys(buRegions).sort();
-  const regionKeys = formData.hpenBusinessUnit
+  // Derived values
+  const buKeys            = Object.keys(buRegions).sort();
+  const regionKeys        = formData.hpenBusinessUnit
     ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort()
     : [];
   const focusCodes        = formData.solutionsFocus ? formData.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : [];
-  const activeBuConfig     = formData.hpenBusinessUnit ? (buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined) : undefined;
-  const reviewingSedEmail  = activeBuConfig?.sedEmail || '';
-  const activeTeam         = sseTeams.find(t => t.name === formData.specialtyType);
-  const activeTeamManager  = activeTeam?.managerEmail || '';
-  const effectiveSedEmail  = activeTeamManager || reviewingSedEmail;
+  const activeBuConfig    = formData.hpenBusinessUnit ? (buRegions[formData.hpenBusinessUnit] as IBUConfig | undefined) : undefined;
+  const reviewingSedEmail = activeBuConfig?.sedEmail || '';
+  const activeTeam        = sseTeams.find(t => t.name === formData.specialtyType);
+  const effectiveSedEmail = activeTeam?.managerEmail || reviewingSedEmail;
+
+  const suggestedContacts: IContact[] = React.useMemo(() => {
+    if (!contactsLoaded || !contacts.length || !focusCodes.length) return [];
+    return contacts.filter(c => {
+      if (dismissedIds.has(c.id)) return false;
+      const cSols = c.pocSolutions.split(';').map(s => s.trim()).filter(Boolean);
+      return focusCodes.some(s => cSols.includes(s));
+    });
+  }, [contacts, contactsLoaded, focusCodes.join(','), dismissedIds]);
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -493,10 +551,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         <div style={{ fontSize: 22, fontWeight: 700, color: HPE_NAVY, marginBottom: 8 }}>Request Sent</div>
         <div style={{ fontSize: 14, color: '#605e5c', marginBottom: 24 }}>
           Your SSE support request for <strong>{formData.customerName}</strong> has been submitted.
-          Your SED/GM will review it and assign the SSE — typically within 24 hours.
+          {sedApprovalRequired
+            ? ' Your SED/GM will review it and assign the SSE — typically within 24 hours.'
+            : ' The SSE has been notified directly.'}
         </div>
-        <button
-          onClick={() => { setFormData(EMPTY_FORM); setSubmitted(false); }}
+        <button onClick={() => { setFormData(EMPTY_FORM); setSubmitted(false); setContacts([]); setContactsLoaded(false); setDismissedIds(new Set()); }}
           style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
           Submit Another Request
         </button>
@@ -505,10 +564,10 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   }
 
   return (
-    <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
+    <div style={{ maxWidth: 700, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
 
       {/* Header */}
-      <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 3, height: 22, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
           <div>
@@ -535,16 +594,15 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           {validationErrors.map((e, i) => <div key={i} style={{ fontSize: 13, color: '#a4262c' }}>• {e}</div>)}
         </div>
       )}
-
       {submitError && (
         <div style={{ background: '#fde7e9', border: '1px solid #d13438', borderRadius: 4, padding: '10px 14px', marginBottom: 12 }}>
           <div style={{ fontSize: 13, color: '#a4262c' }}>{submitError}</div>
         </div>
       )}
 
-      {/* Section 1 — Request Info */}
+      {/* ── Section 1: Request Info ── */}
       <div style={SECTION}>
-        <div style={SECTION_TITLE}>Request Info</div>
+        <SectionHeader title="Request Info" />
 
         <div style={FIELD_ROW}>
           <label style={LABEL_STYLE}>Customer Name <span style={{ color: '#d13438' }}>*</span></label>
@@ -575,8 +633,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
                 set('buRegion', e.target.value);
                 if (e.target.value) localStorage.setItem('srt_region', e.target.value); else localStorage.removeItem('srt_region');
               }}
-              disabled={!formData.hpenBusinessUnit}
-              style={INPUT}>
+              disabled={!formData.hpenBusinessUnit} style={INPUT}>
               <option value="">— Select Region —</option>
               {regionKeys.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
@@ -588,8 +645,11 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
             <label style={LABEL_STYLE}>Priority <span style={{ color: '#d13438' }}>*</span></label>
             <div style={{ display: 'flex', gap: 6 }}>
               {['High', 'Medium', 'Low'].map(p => (
-                <button key={p} onClick={() => set('csePriority', p)}
-                  style={{ ...TOGGLE_BTN(formData.csePriority === p), borderColor: p === 'High' ? '#d13438' : p === 'Medium' ? '#ca5010' : '#107c10', background: formData.csePriority === p ? (p === 'High' ? '#d13438' : p === 'Medium' ? '#ca5010' : '#107c10') : '#fff', color: formData.csePriority === p ? '#fff' : '#323130' }}>
+                <button key={p} type="button" onClick={() => set('csePriority', p)}
+                  style={{ ...TOGGLE_BTN(formData.csePriority === p),
+                    borderColor: p === 'High' ? '#d13438' : p === 'Medium' ? '#ca5010' : '#107c10',
+                    background: formData.csePriority === p ? (p === 'High' ? '#d13438' : p === 'Medium' ? '#ca5010' : '#107c10') : '#fff',
+                    color: formData.csePriority === p ? '#fff' : '#323130' }}>
                   {p}
                 </button>
               ))}
@@ -611,166 +671,175 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         </div>
       </div>
 
-      {/* Section 2 — SSE Selection */}
+      {/* ── Section 2: Solutions Focus ── */}
       <div style={SECTION}>
-        <div style={SECTION_TITLE}>SSE Selection</div>
-
-        {/* Specialty Type */}
-        {sseTeams.length > 0 && (
-          <div style={FIELD_ROW}>
-            <label style={LABEL_STYLE}>Specialty Type</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {sseTeams.map(team => {
-                const active = formData.specialtyType === team.name;
-                return (
-                  <button key={team.name} type="button"
-                    onClick={() => set('specialtyType', active ? '' : team.name)}
-                    style={{
-                      padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                      background: active ? HPE_NAVY : '#f3f2f1',
-                      color: active ? '#fff' : '#323130',
-                      border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
-                    }}>
-                    {team.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {effectiveSedEmail && (
-          <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
-            <strong>{emailToName(effectiveSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
-          </div>
-        )}
-        <PeoplePickerField
-          label="Requested SSE"
-          required
-          value={formData.requestedSse}
-          onChange={v => set('requestedSse', v)}
-          searchUsers={handleSearchUsers}
-        />
-
-        {/* Additional Resource */}
-        <div style={{ marginTop: 14 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <input type="checkbox" checked={formData.additionalResourceNeeded}
-              onChange={e => set('additionalResourceNeeded', e.target.checked)}
-              style={{ accentColor: HPE_NAVY, width: 15, height: 15 }} />
-            Additional resource needed?
-          </label>
-        </div>
-
-        {formData.additionalResourceNeeded && (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-            {/* Additional SSE 1 */}
-            <div style={{ padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #2</div>
-              {sseTeams.length > 0 && (
-                <div style={FIELD_ROW}>
-                  <label style={LABEL_STYLE}>Specialty Type</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {sseTeams.map(team => {
-                      const active = formData.additionalSpecialty === team.name;
-                      return (
-                        <button key={team.name} type="button"
-                          onClick={() => set('additionalSpecialty', active ? '' : team.name)}
-                          style={{
-                            padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                            background: active ? HPE_NAVY : '#f3f2f1',
-                            color: active ? '#fff' : '#323130',
-                            border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
-                          }}>
-                          {team.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty); const eff = t?.managerEmail || reviewingSedEmail; return eff ? (
-                <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
-                  <strong>{emailToName(eff)}</strong> (SED/GM) will review this request before the SSE is notified.
-                </div>
-              ) : null; })()}
-              <PeoplePickerField
-                label="Additional SSE"
-                value={formData.additionalSse}
-                onChange={v => set('additionalSse', v)}
-                searchUsers={handleSearchUsers}
-              />
-            </div>
-
-            {/* Additional SSE 2 */}
-            <div style={{ padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, marginBottom: 10 }}>Additional SSE #3</div>
-              {sseTeams.length > 0 && (
-                <div style={FIELD_ROW}>
-                  <label style={LABEL_STYLE}>Specialty Type</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {sseTeams.map(team => {
-                      const active = formData.additionalSpecialty2 === team.name;
-                      return (
-                        <button key={team.name} type="button"
-                          onClick={() => set('additionalSpecialty2', active ? '' : team.name)}
-                          style={{
-                            padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
-                            background: active ? HPE_NAVY : '#f3f2f1',
-                            color: active ? '#fff' : '#323130',
-                            border: active ? `2px solid ${HPE_NAVY}` : '2px solid #edebe9',
-                          }}>
-                          {team.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {(() => { const t = sseTeams.find(t => t.name === formData.additionalSpecialty2); const eff = t?.managerEmail || reviewingSedEmail; return eff ? (
-                <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
-                  <strong>{emailToName(eff)}</strong> (SED/GM) will review this request before the SSE is notified.
-                </div>
-              ) : null; })()}
-              <PeoplePickerField
-                label="Additional SSE"
-                value={formData.additionalSse2}
-                onChange={v => set('additionalSse2', v)}
-                searchUsers={handleSearchUsers}
-              />
-            </div>
-
-          </div>
-        )}
-      </div>
-
-      {/* Section 3 — Solutions Focus */}
-      <div style={SECTION}>
-        <div style={SECTION_TITLE}>Solutions Focus</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px' }}>
+        <SectionHeader title="Solutions Focus" />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', marginBottom: 14 }}>
           {solutions.map(sol => {
             const checked = focusCodes.includes(sol.code);
             return (
               <label key={sol.code} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
                 <input type="checkbox" checked={checked}
                   onChange={e => {
-                    const next = e.target.checked
-                      ? [...focusCodes, sol.code]
-                      : focusCodes.filter(c => c !== sol.code);
+                    const next = e.target.checked ? [...focusCodes, sol.code] : focusCodes.filter(c => c !== sol.code);
                     set('solutionsFocus', next.join(','));
                   }}
-                  style={{ accentColor: HPE_NAVY }} />
+                  style={{ accentColor: HPE_GREEN }} />
                 {sol.name}
               </label>
             );
           })}
         </div>
+        <button type="button"
+          onClick={() => handleFindResources().catch(() => undefined)}
+          disabled={focusCodes.length === 0 || contactsLoading}
+          style={{ padding: '7px 20px', fontSize: 13, fontWeight: 700,
+            background: focusCodes.length === 0 || contactsLoading ? '#ccc' : HPE_GREEN,
+            color: '#fff', border: 'none', borderRadius: 4,
+            cursor: focusCodes.length === 0 || contactsLoading ? 'not-allowed' : 'pointer' }}>
+          {contactsLoading ? 'Searching…' : '🔍 Find Resources'}
+        </button>
       </div>
 
-      {/* Section 4 — Support Details */}
+      {/* ── Suggested Resources ── */}
+      {contactsLoaded && (
+        <div style={{ padding: '10px 14px', marginBottom: 12, background: '#f0f7f4', border: '1px solid #a5d6a7', borderRadius: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: suggestedContacts.length > 0 ? 10 : 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#107c10' }}>
+              {suggestedContacts.length > 0
+                ? 'Suggested resources from Contact Directory:'
+                : 'No matching resources found in Contact Directory for the selected solutions.'}
+            </div>
+            {suggestedContacts.length > 0 && (
+              <button onClick={() => setDismissedIds(new Set())}
+                style={{ fontSize: 11, background: 'none', border: '1px solid #107c10', borderRadius: 3, color: '#107c10', padding: '2px 8px', cursor: 'pointer', lineHeight: 1.4 }}>
+                ↺ Reset
+              </button>
+            )}
+          </div>
+          {suggestedContacts.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {suggestedContacts.map(c => {
+                const isExpanded = expandedIds.has(c.id);
+                const slot1Free = !formData.requestedSse.includes('/');
+                const slot2Free = !formData.additionalSse.includes('/');
+                const slot3Free = !formData.additionalSse2.includes('/');
+                const available = [slot1Free && 'primary', slot2Free && 'secondary', slot3Free && 'tertiary'].filter(Boolean) as string[];
+                const lower = (c.category || '').toLowerCase();
+                const naturalSlot = lower.includes('mist') ? 'tertiary' : (lower.includes('datacenter') || lower.includes('data center') || lower.includes('dcn')) ? 'secondary' : 'primary';
+                const applyRole = available.includes(naturalSlot) ? naturalSlot : (available[0] || 'primary');
+                const roleLabel = applyRole === 'secondary' ? 'DC Specialist' : applyRole === 'tertiary' ? 'Mist Specialist' : (matchTeam(c.category) || 'Legacy HPE/Aruba');
+                const displayName = c.name.replace(/\s*\(.*\)$/, '').trim();
+                return (
+                  <div key={c.id} style={{ background: '#fff', border: '1px solid #a5d6a7', borderRadius: 4, padding: '8px 10px', minWidth: 170, flex: '1 1 170px', maxWidth: 250, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#107c10', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>{c.category}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#222', marginBottom: 4 }}>{displayName}</div>
+                    <button onClick={() => setExpandedIds(prev => prev.has(c.id) ? new Set(Array.from(prev).filter(id => id !== c.id)) : new Set(Array.from(prev).concat(c.id)))}
+                      style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, fontSize: 11, color: '#0078d4', cursor: 'pointer', marginBottom: isExpanded ? 6 : 0 }}>
+                      ℹ Details {isExpanded ? '▴' : '▾'}
+                    </button>
+                    {isExpanded && (
+                      <div style={{ fontSize: 11, color: '#444', marginBottom: 6, borderTop: '1px dashed #c8e6c9', paddingTop: 6, lineHeight: 1.6 }}>
+                        {c.geography    && <div><strong>Territory:</strong> {c.geography}</div>}
+                        {c.businessUnit && <div><strong>BU:</strong> {c.businessUnit}</div>}
+                        {c.email        && <div style={{ wordBreak: 'break-all' }}><strong>Email:</strong> {c.email}</div>}
+                        {c.phone        && <div><strong>Phone:</strong> {c.phone}</div>}
+                      </div>
+                    )}
+                    {available.length > 0 ? (
+                      <div style={{ marginTop: 'auto', paddingTop: 8 }}>
+                        {slot1Free && (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer', marginBottom: 5, color: '#323130' }}>
+                            <input type="checkbox" checked={false}
+                              onChange={e => {
+                                if (!e.target.checked) return;
+                                const val = `${c.name} / ${c.email}`;
+                                const teamName = matchTeam(c.category);
+                                setFormData(prev => ({ ...prev, requestedSse: val, specialtyType: teamName || prev.specialtyType }));
+                                setDismissedIds(prev => new Set(Array.from(prev).concat(c.id)));
+                              }}
+                              style={{ accentColor: HPE_GREEN }} />
+                            Make Primary SSE
+                          </label>
+                        )}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button onClick={() => {
+                            const val = `${c.name} / ${c.email}`;
+                            const teamName = matchTeam(c.category);
+                            if (applyRole === 'primary') {
+                              setFormData(prev => ({ ...prev, requestedSse: val, specialtyType: teamName || prev.specialtyType }));
+                            } else if (applyRole === 'secondary') {
+                              setFormData(prev => ({ ...prev, additionalSse: val, additionalSpecialty: teamName || prev.additionalSpecialty }));
+                            } else {
+                              setFormData(prev => ({ ...prev, additionalSse2: val, additionalSpecialty2: teamName || prev.additionalSpecialty2 }));
+                            }
+                            setDismissedIds(prev => new Set(Array.from(prev).concat(c.id)));
+                          }}
+                            style={{ flex: 1, fontSize: 12, fontWeight: 700, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 3, padding: '5px 0', cursor: 'pointer' }}>
+                            ✓ {roleLabel}
+                          </button>
+                          <button onClick={() => setDismissedIds(prev => new Set(Array.from(prev).concat(c.id)))}
+                            style={{ fontSize: 12, background: '#fff', color: '#999', border: '1px solid #ccc', borderRadius: 3, padding: '5px 8px', cursor: 'pointer' }}>✕</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 'auto', paddingTop: 8, fontSize: 11, color: '#888', fontStyle: 'italic' }}>All slots filled</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Section 3: SSE Selection ── */}
       <div style={SECTION}>
-        <div style={SECTION_TITLE}>Support Details</div>
+        <SectionHeader title="SSE Selection" />
+
+        {effectiveSedEmail && (
+          <div style={{ background: '#eff6fc', border: '1px solid #0078d4', borderRadius: 4, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#0078d4' }}>
+            <strong>{emailToName(effectiveSedEmail)}</strong> (SED/GM) will review this request before the SSE is notified.
+          </div>
+        )}
+
+        <PeoplePickerField label="Primary SSE" required value={formData.requestedSse} onChange={v => set('requestedSse', v)} searchUsers={handleSearchUsers} />
+
+        {/* Card-populated entries appear as they're applied */}
+        {!!formData.additionalSse && (
+          <PeoplePickerField
+            label={formData.additionalSpecialty || 'DC Specialist'}
+            value={formData.additionalSse} onChange={v => set('additionalSse', v)} searchUsers={handleSearchUsers} />
+        )}
+        {!!formData.additionalSse2 && (
+          <PeoplePickerField
+            label={formData.additionalSpecialty2 || 'Mist Specialist'}
+            value={formData.additionalSse2} onChange={v => set('additionalSse2', v)} searchUsers={handleSearchUsers} />
+        )}
+
+        {/* Dynamic extra SSEs — each checkbox click adds one more picker */}
+        {formData.extraSses.map((val, i) => (
+          <PeoplePickerField key={i}
+            label="Additional SSE"
+            value={val}
+            onChange={v => setFormData(prev => {
+              const next = [...prev.extraSses];
+              next[i] = v;
+              return { ...prev, extraSses: next };
+            })}
+            searchUsers={handleSearchUsers} />
+        ))}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#323130', marginTop: 6 }}>
+          <input type="checkbox" checked={false}
+            onChange={e => { if (e.target.checked) setFormData(prev => ({ ...prev, extraSses: [...prev.extraSses, ''] })); }}
+            style={{ accentColor: HPE_GREEN }} />
+          Additional SSEs
+        </label>
+      </div>
+
+      {/* ── Section 4: Support Details ── */}
+      <div style={SECTION}>
+        <SectionHeader title="Support Details" />
 
         <div style={FIELD_ROW}>
           <label style={LABEL_STYLE}>Opportunity</label>
@@ -784,9 +853,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
           <label style={LABEL_STYLE}>Support Type <span style={{ color: '#d13438' }}>*</span></label>
           <div style={{ display: 'flex', gap: 6 }}>
             {(['Remote', 'On-Site', 'Both'] as const).map(t => (
-              <button key={t} onClick={() => set('supportType', t)} style={TOGGLE_BTN(formData.supportType === t)}>
-                {t}
-              </button>
+              <button key={t} type="button" onClick={() => set('supportType', t)} style={TOGGLE_BTN(formData.supportType === t)}>{t}</button>
             ))}
           </div>
         </div>
@@ -800,48 +867,29 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         </div>
 
         {(formData.supportType === 'Remote' || formData.supportType === 'Both') && (
-          <ScheduleBlock
-            label="Remote Schedule"
-            dateOnly
-            tbd={formData.remoteTbd}
-            start={formData.remoteStart}
-            end={formData.remoteEnd}
-            duration={formData.remoteDuration}
-            onTbd={v => set('remoteTbd', v)}
-            onStart={v => set('remoteStart', v)}
-            onEnd={v => set('remoteEnd', v)}
-            onDuration={v => set('remoteDuration', v)}
-          />
+          <ScheduleBlock label="Remote Schedule" dateOnly
+            tbd={formData.remoteTbd} start={formData.remoteStart} end={formData.remoteEnd} duration={formData.remoteDuration}
+            onTbd={v => set('remoteTbd', v)} onStart={v => set('remoteStart', v)} onEnd={v => set('remoteEnd', v)} onDuration={v => set('remoteDuration', v)} />
         )}
-
         {(formData.supportType === 'On-Site' || formData.supportType === 'Both') && (
-          <ScheduleBlock
-            label="On-Site Schedule"
-            dateOnly
-            tbd={formData.onsiteTbd}
-            start={formData.onsiteStart}
-            end={formData.onsiteEnd}
-            duration={formData.onsiteDuration}
-            destination={formData.onsiteDestination}
-            onTbd={v => set('onsiteTbd', v)}
-            onStart={v => set('onsiteStart', v)}
-            onEnd={v => set('onsiteEnd', v)}
-            onDuration={v => set('onsiteDuration', v)}
-            onDestination={v => set('onsiteDestination', v)}
-          />
+          <ScheduleBlock label="On-Site Schedule" dateOnly
+            tbd={formData.onsiteTbd} start={formData.onsiteStart} end={formData.onsiteEnd} duration={formData.onsiteDuration} destination={formData.onsiteDestination}
+            onTbd={v => set('onsiteTbd', v)} onStart={v => set('onsiteStart', v)} onEnd={v => set('onsiteEnd', v)} onDuration={v => set('onsiteDuration', v)} onDestination={v => set('onsiteDestination', v)} />
         )}
       </div>
 
       {/* Submit */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-        <button
-          disabled={submitting}
-          onClick={handleSubmit}
-          style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: submitting ? '#ccc' : HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4, marginBottom: 32 }}>
+        <button disabled={submitting} onClick={handleSubmit}
+          style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700,
+            background: submitting ? '#ccc' : HPE_GREEN, color: '#fff',
+            border: 'none', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer' }}>
           {submitting ? 'Sending…' : '✉ Send SSE Request'}
         </button>
         <span style={{ fontSize: 12, color: '#605e5c' }}>
-          Notifies your SED/GM for review — SSE assigned after approval
+          {sedApprovalRequired
+            ? 'Notifies your SED/GM for review — SSE assigned after approval'
+            : 'Routes directly to the SSE — SED approval bypassed'}
         </span>
       </div>
 
