@@ -208,6 +208,10 @@ export class CseRequestService {
     });
   }
 
+  async delete(id: number): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).delete();
+  }
+
   async updateSolutions(id: number, solutionsFocus: string): Promise<void> {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ SolutionsFocus: solutionsFocus });
   }

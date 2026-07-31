@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.65';
+const VERSION = '1.0.66';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -119,6 +119,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [drawerNotes, setDrawerNotes]             = useState('');
   const [savingNotes, setSavingNotes]             = useState(false);
   const [urlActionBanner, setUrlActionBanner]     = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+  const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
   const tableRef                                = useRef<HTMLDivElement>(null);
 
   const userEmail    = context.pageContext.user.email.toLowerCase();
@@ -315,6 +316,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } finally { setSavingDates(false); }
   };
 
+  const handleDeleteSelected = async (): Promise<void> => {
+    if (selectedIds.size === 0) return;
+    const confirmed = window.confirm(`Permanently delete ${selectedIds.size} request${selectedIds.size > 1 ? 's' : ''}? This cannot be undone.`);
+    if (!confirmed) return;
+    const svc = new CseRequestService(sp);
+    await Promise.all(Array.from(selectedIds).map(id => svc.delete(id).catch(() => undefined)));
+    setRequests(prev => prev.filter(r => !selectedIds.has(r.id!)));
+    setSelectedIds(new Set());
+  };
+
   const handleStatusChange = async (id: number, status: CseRequestStatus): Promise<void> => {
     try {
       await new CseRequestService(sp).updateStatus(id, status);
@@ -433,12 +444,22 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
     const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
-    const colSpan       = (isAdmin || isSED) ? 12 : 11;
+    const colSpan       = 11 + (isSED ? 1 : 0) + (isAdmin ? 1 : 0);
     const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
     return (
       <React.Fragment key={req.id ?? i}>
       <tr style={{ background: rowBg, borderBottom: isExpanded ? 'none' : '1px solid #edebe9', cursor: 'pointer' }}
           onClick={() => handleExpand(req)}>
+        {isAdmin && (
+          <td style={{ ...TD, width: 28, padding: '4px 6px' }} onClick={e => e.stopPropagation()}>
+            <input type="checkbox" checked={selectedIds.has(req.id!)}
+              onChange={e => setSelectedIds(prev => {
+                const next = new Set(prev);
+                if (e.target.checked) { next.add(req.id!); } else { next.delete(req.id!); }
+                return next;
+              })} />
+          </td>
+        )}
         <td style={{ ...TD, opacity: isCancelled ? 0.6 : 1 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <span style={{ fontSize: 10, color: '#6b2faf', marginTop: 3, flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
@@ -984,6 +1005,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               Clear Filters
             </button>
           )}
+          {isAdmin && selectedIds.size > 0 && (
+            <button onClick={handleDeleteSelected}
+              style={{ fontSize: 11, padding: '5px 10px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>
+              🗑 Delete {selectedIds.size} selected
+            </button>
+          )}
         </div>
 
         {visibleRequests.length === 0 ? (
@@ -1003,6 +1030,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                       else { setSortField(field); setSortDir('asc'); }
                     };
                     return (<>
+                  {isAdmin && <th style={{ ...TH, width: 28, padding: '4px 6px' }} />}
                   <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('customer')}>Customer{sortIcon('customer')}</th>
                   <th style={TH}>SE</th>
                   <th style={TH}>SSE / SED</th>
