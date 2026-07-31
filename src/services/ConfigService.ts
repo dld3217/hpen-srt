@@ -81,6 +81,19 @@ export class ConfigService {
     return users.includes(email.trim().toLowerCase());
   }
 
+  public async isSED(email: string): Promise<boolean> {
+    try {
+      const items: { Value: string }[] = await this._sp.web.lists
+        .getByTitle('AppConfig').items
+        .filter("Title eq 'SRTSEDs'").select('Value')();
+      if (items.length > 0 && items[0].Value) {
+        const seds = items[0].Value.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+        return seds.includes(email.trim().toLowerCase());
+      }
+    } catch { /* fall through */ }
+    return false;
+  }
+
   public async saveSuperUsers(users: string[]): Promise<void> {
     const items: { Id: number }[] = await this._sp.web.lists
       .getByTitle('AppConfig').items

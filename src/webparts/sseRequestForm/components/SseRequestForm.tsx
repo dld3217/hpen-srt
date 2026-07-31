@@ -75,7 +75,7 @@ const EMPTY_FORM: ISseFormData = {
   extraSses: [],
 };
 
-const VERSION = '1.0.62';
+const VERSION = '1.0.63';
 
 const greeting = (): string => {
   const h = new Date().getHours();

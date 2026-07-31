@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.64';
+const VERSION = '1.0.65';
 
 const TH: React.CSSProperties = {
   padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
@@ -83,6 +83,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState('');
   const [isAdmin, setIsAdmin]           = useState(false);
+  const [isSED, setIsSED]               = useState(false);
   const [showAdmin, setShowAdmin]       = useState(false);
   const [savingId, setSavingId]         = useState<number | null>(null);
   const [decliningId, setDecliningId]   = useState<number | null>(null);
@@ -129,8 +130,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   useEffect(() => {
     const svc       = new CseRequestService(sp);
     const configSvc = new ConfigService(sp);
-    Promise.all([svc.getAll(), configSvc.isSuperUser(userEmail)])
-      .then(([all, admin]) => { setRequests(all); setIsAdmin(admin); setLoading(false); })
+    Promise.all([svc.getAll(), configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail)])
+      .then(([all, admin, sed]) => { setRequests(all); setIsAdmin(admin); setIsSED(sed); setLoading(false); })
       .catch(err => { setError(String(err)); setLoading(false); });
   }, []);
 
@@ -432,7 +433,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
     const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
-    const colSpan       = isAdmin ? 12 : 11;
+    const colSpan       = (isAdmin || isSED) ? 12 : 11;
     const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
     return (
       <React.Fragment key={req.id ?? i}>
@@ -550,7 +551,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           )}
         </td>
         <td style={{ ...TD, fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>{fmtDate(req.modified || '') || '—'}</td>
-        {isAdmin && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
+        {isSED && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
           {req.requestStatus === 'Pending' && (
             decliningId === req.id ? (
               <div>
@@ -1015,7 +1016,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   <th style={TH}>Temp</th>
                   <th style={TH}>Sign-off</th>
                   <th style={TH}>Updated</th>
-                  {isAdmin && <th style={TH}>Actions</th>}
+                  {isSED && <th style={TH}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
