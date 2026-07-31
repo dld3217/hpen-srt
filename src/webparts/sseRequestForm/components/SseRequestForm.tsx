@@ -75,7 +75,7 @@ const EMPTY_FORM: ISseFormData = {
   extraSses: [],
 };
 
-const VERSION = '1.0.61';
+const VERSION = '1.0.62';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -476,43 +476,6 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
 
       const svc = new CseRequestService(sp);
       await svc.create({ ...basePayload, title: `${formData.customerName} — SSE Request`, requestedCse: formData.requestedSse });
-
-      if (formData.additionalSse.includes('/')) {
-        const addlTeam1 = sseTeams.find(t => t.name === formData.additionalSpecialty);
-        await svc.create({
-          ...basePayload,
-          title: `${formData.customerName} — SSE Request (Additional Resource)`,
-          requestedCse: formData.additionalSse,
-          sedEmail: addlTeam1?.managerEmail || buSedEmail,
-          sseManagerEmail: addlTeam1?.managerEmail || '',
-          specialtyType: formData.additionalSpecialty,
-        });
-      }
-
-      if (formData.additionalSse2.includes('/')) {
-        const addlTeam2 = sseTeams.find(t => t.name === formData.additionalSpecialty2);
-        await svc.create({
-          ...basePayload,
-          title: `${formData.customerName} — SSE Request (Additional Resource 2)`,
-          requestedCse: formData.additionalSse2,
-          sedEmail: addlTeam2?.managerEmail || buSedEmail,
-          sseManagerEmail: addlTeam2?.managerEmail || '',
-          specialtyType: formData.additionalSpecialty2,
-        });
-      }
-
-      for (let i = 0; i < formData.extraSses.length; i++) {
-        if (formData.extraSses[i].includes('/')) {
-          await svc.create({
-            ...basePayload,
-            title: `${formData.customerName} — SSE Request (Additional Resource ${i + 3})`,
-            requestedCse: formData.extraSses[i],
-            sedEmail: buSedEmail,
-            sseManagerEmail: '',
-            specialtyType: '',
-          });
-        }
-      }
 
       setSubmitted(true);
     } catch (err) {
