@@ -445,7 +445,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
     const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
     const colSpan       = 11 + (isSED ? 1 : 0) + (isAdmin ? 1 : 0);
-    const rowBg         = isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
+    const rowBg         = selectedIds.has(req.id!) ? '#ffe9e9' : isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
     return (
       <React.Fragment key={req.id ?? i}>
       <tr style={{ background: rowBg, borderBottom: isExpanded ? 'none' : '1px solid #edebe9', cursor: 'pointer' }}
