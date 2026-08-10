@@ -17,6 +17,14 @@
           "manifest": "./src/webparts/srtDashboard/SrtDashboardWebPart.manifest.json"
         }
       ]
+    },
+    "strategic-engagement-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/strategicEngagement/StrategicEngagementWebPart.js",
+          "manifest": "./src/webparts/strategicEngagement/StrategicEngagementWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},

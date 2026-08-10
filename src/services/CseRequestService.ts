@@ -14,6 +14,7 @@ const SP_SELECT = [
   'SEPrimary', 'SEMPrimary', 'SEDEmail', 'BURegion', 'HPENBusinessUnit',
   'CustomerName', 'POCName', 'OpportunityAmount',
   'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'Modified', 'SpecialtyType',
+  'EngagementType', 'EngagementPurpose', 'CurrentEnvironment', 'HasDisplacement', 'EngagementOutcome',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,6 +67,11 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     notes: item.Notes || '',
     modified: item.Modified || '',
     specialtyType: item.SpecialtyType || '',
+    engagementType: unwrapChoice(item.EngagementType),
+    engagementPurpose: unwrapChoice(item.EngagementPurpose),
+    currentEnvironment: item.CurrentEnvironment || '',
+    hasDisplacement: !!item.HasDisplacement,
+    engagementOutcome: unwrapChoice(item.EngagementOutcome),
   };
 }
 
@@ -107,6 +113,11 @@ export class CseRequestService {
       CustTemp: req.custTemp || 'Normal',
       Notes: req.notes,
       SpecialtyType: req.specialtyType || '',
+      EngagementType: req.engagementType || '',
+      EngagementPurpose: req.engagementPurpose || '',
+      CurrentEnvironment: req.currentEnvironment || '',
+      HasDisplacement: !!req.hasDisplacement,
+      EngagementOutcome: req.engagementOutcome || '',
     });
     return result.Id || result.id || 0;
   }
