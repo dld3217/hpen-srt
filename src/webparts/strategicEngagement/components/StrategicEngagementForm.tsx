@@ -22,28 +22,34 @@ interface IStrategicFormData {
   customerName: string;
   hpenBusinessUnit: string;
   buRegion: string;
+  primarySe: string;
   requestedSse: string;
   engagementPurpose: string;
   landscape: IEnvironmentRow[];
   notes: string;
   supportType: 'Remote' | 'On-Site' | 'Both' | '';
   datesTbd: boolean;
-  startDate: string;
-  endDate: string;
-  duration: string;
+  remoteStart: string;
+  remoteEnd: string;
+  remoteDuration: string;
+  onsiteStart: string;
+  onsiteEnd: string;
+  onsiteDuration: string;
   location: string;
   csePriority: string;
   opportunityAmount: number;
 }
 
 const EMPTY_FORM: IStrategicFormData = {
-  customerName: '', hpenBusinessUnit: '', buRegion: '', requestedSse: '',
+  customerName: '', hpenBusinessUnit: '', buRegion: '', primarySe: '', requestedSse: '',
   engagementPurpose: '', landscape: [], notes: '',
-  supportType: '', datesTbd: false, startDate: '', endDate: '', duration: '', location: '',
+  supportType: '', datesTbd: false,
+  remoteStart: '', remoteEnd: '', remoteDuration: '',
+  onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
   csePriority: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -150,6 +156,36 @@ const PeoplePickerField: React.FC<{
   );
 };
 
+// ── ScheduleBlock — date-only start/end + duration, optional location ──────────
+const ScheduleBlock: React.FC<{
+  label: string; start: string; end: string; duration: string; location?: string;
+  onStart: (v: string) => void; onEnd: (v: string) => void; onDuration: (v: string) => void; onLocation?: (v: string) => void;
+}> = ({ label, start, end, duration, location, onStart, onEnd, onDuration, onLocation }) => (
+  <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
+    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{label}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+      <div>
+        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested Start</label>
+        <input type="date" value={start ? start.substring(0, 10) : ''} onChange={e => onStart(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+      </div>
+      <div>
+        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested End</label>
+        <input type="date" value={end ? end.substring(0, 10) : ''} onChange={e => onEnd(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+      </div>
+    </div>
+    <div style={{ marginBottom: onLocation ? 8 : 0 }}>
+      <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
+      <input type="text" value={duration} onChange={e => onDuration(e.target.value)} placeholder="e.g. 90-min briefing, half day" style={INPUT} />
+    </div>
+    {onLocation && (
+      <div>
+        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Location</label>
+        <input type="text" value={location || ''} onChange={e => onLocation(e.target.value)} placeholder="e.g. Denver, CO" style={INPUT} />
+      </div>
+    )}
+  </div>
+);
+
 // ── SolutionLandscape — what we position + what they run + disposition ─────────
 const SolutionLandscape: React.FC<{
   rows: IEnvironmentRow[];
@@ -166,7 +202,7 @@ const SolutionLandscape: React.FC<{
   const setVendor = (i: number, vendor: string): void =>
     update(i, { vendor, disposition: autoDisposition(vendor) });
   const remove = (i: number): void => onChange(rows.filter((_, idx) => idx !== i));
-  const add = (): void => onChange([...rows, { solutionCode: '', solution: '', vendor: '', product: '', version: '', disposition: '' }]);
+  const add = (): void => onChange([...rows, { solutionCode: '', solution: '', vendor: '', product: '', version: '', disposition: '', detail: '' }]);
 
   const GRID = '1.4fr 1.1fr 1fr 0.7fr 132px 28px';
 
@@ -180,47 +216,57 @@ const SolutionLandscape: React.FC<{
       {rows.map((row, i) => {
         const comp = isCompetitor(row.vendor);
         const badge = DISPOSITION_STYLE[row.disposition];
+        const needsDetail = row.disposition === 'Integrate' && !(row.detail || '').trim();
         return (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, alignItems: 'center', marginBottom: 6 }}>
-            <select value={row.solutionCode} onChange={e => setSolution(i, e.target.value)} style={CELL_INPUT}>
-              <option value="">— Solution —</option>
-              {cats.map(cat => (
-                <optgroup key={cat} label={cat}>
-                  {solutions.filter(s => s.category === cat).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            <select value={row.vendor} onChange={e => setVendor(i, e.target.value)} style={CELL_INPUT}>
-              <option value="">— Vendor —</option>
-              <optgroup label="HPE (ours)">{OUR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}</optgroup>
-              <optgroup label="Greenfield"><option value={GREENFIELD_VENDOR}>{GREENFIELD_VENDOR}</option></optgroup>
-              <optgroup label="Competitors">{COMPETITOR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}</optgroup>
-            </select>
-            <input type="text" value={row.product} onChange={e => update(i, { product: e.target.value })} placeholder="e.g. Catalyst 9300" style={CELL_INPUT} />
-            <input type="text" value={row.version} onChange={e => update(i, { version: e.target.value })} placeholder="17.9" style={CELL_INPUT} />
-            {/* Disposition */}
-            {comp ? (
-              <div style={{ display: 'flex', gap: 3 }}>
-                {(['Integrate', 'Displace'] as const).map(d => {
-                  const active = row.disposition === d;
-                  const c = DISPOSITION_STYLE[d];
-                  return (
-                    <button key={d} type="button" onClick={() => update(i, { disposition: d })}
-                      style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: '3px 2px', borderRadius: 4, cursor: 'pointer',
-                        border: `1px solid ${active ? c.color : '#ccc'}`, background: active ? c.bg : '#fff', color: active ? c.color : '#888' }}>
-                      {d === 'Integrate' ? '🤝 Integ.' : '🎯 Displ.'}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <span style={{ fontSize: 10, fontWeight: 700, textAlign: 'center', padding: '2px 4px', borderRadius: 8, whiteSpace: 'nowrap',
-                background: badge ? badge.bg : '#f0f0f0', color: badge ? badge.color : '#a19f9d' }}>
-                {badge ? badge.label : '—'}
-              </span>
+          <div key={i} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, alignItems: 'center' }}>
+              <select value={row.solutionCode} onChange={e => setSolution(i, e.target.value)} style={CELL_INPUT}>
+                <option value="">— Solution —</option>
+                {cats.map(cat => (
+                  <optgroup key={cat} label={cat}>
+                    {solutions.filter(s => s.category === cat).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <select value={row.vendor} onChange={e => setVendor(i, e.target.value)} style={CELL_INPUT}>
+                <option value="">— Vendor —</option>
+                <optgroup label="HPE (ours)">{OUR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}</optgroup>
+                <optgroup label="Greenfield"><option value={GREENFIELD_VENDOR}>{GREENFIELD_VENDOR}</option></optgroup>
+                <optgroup label="Competitors">{COMPETITOR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}</optgroup>
+              </select>
+              <input type="text" value={row.product} onChange={e => update(i, { product: e.target.value })} placeholder="e.g. Catalyst 9300" style={CELL_INPUT} />
+              <input type="text" value={row.version} onChange={e => update(i, { version: e.target.value })} placeholder="17.9" style={CELL_INPUT} />
+              {comp ? (
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {(['Integrate', 'Displace'] as const).map(d => {
+                    const active = row.disposition === d;
+                    const c = DISPOSITION_STYLE[d];
+                    return (
+                      <button key={d} type="button" onClick={() => update(i, { disposition: d })}
+                        style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: '3px 2px', borderRadius: 4, cursor: 'pointer',
+                          border: `1px solid ${active ? c.color : '#ccc'}`, background: active ? c.bg : '#fff', color: active ? c.color : '#888' }}>
+                        {d === 'Integrate' ? '🤝 Integ.' : '🎯 Displ.'}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span style={{ fontSize: 10, fontWeight: 700, textAlign: 'center', padding: '2px 4px', borderRadius: 8, whiteSpace: 'nowrap',
+                  background: badge ? badge.bg : '#f0f0f0', color: badge ? badge.color : '#a19f9d' }}>
+                  {badge ? badge.label : '—'}
+                </span>
+              )}
+              <button type="button" onClick={() => remove(i)} title="Remove row"
+                style={{ background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#a4262c', fontSize: 12, lineHeight: 1, padding: '4px 6px' }}>✕</button>
+            </div>
+            {comp && !!row.disposition && (
+              <input type="text" value={row.detail || ''} onChange={e => update(i, { detail: e.target.value })}
+                placeholder={row.disposition === 'Integrate'
+                  ? 'Integration detail — how do they coexist? where\'s the boundary? (required)'
+                  : 'Displacement detail — migration story / timeline / what\'s driving the switch (optional)'}
+                style={{ ...CELL_INPUT, marginTop: 4, borderColor: needsDetail ? '#d13438' : '#ccc',
+                  background: needsDetail ? '#fef6f6' : '#fff' }} />
             )}
-            <button type="button" onClick={() => remove(i)} title="Remove row"
-              style={{ background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#a4262c', fontSize: 12, lineHeight: 1, padding: '4px 6px' }}>✕</button>
           </div>
         );
       })}
@@ -253,10 +299,14 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         setBuRegions(bur); setSolutions(sols);
         const savedBU = localStorage.getItem('srt_bu') || '';
         const savedRegion = localStorage.getItem('srt_region') || '';
-        if (savedBU && bur[savedBU]) {
-          const validRegion = savedRegion && (bur[savedBU] as IBUConfig)?.regions?.[savedRegion] ? savedRegion : '';
-          setFormData(prev => ({ ...prev, hpenBusinessUnit: savedBU, buRegion: validRegion }));
-        }
+        const buOk = !!(savedBU && bur[savedBU]);
+        const validRegion = (buOk && savedRegion && (bur[savedBU] as IBUConfig)?.regions?.[savedRegion]) ? savedRegion : '';
+        setFormData(prev => ({
+          ...prev,
+          primarySe: prev.primarySe || `${userDisplayName} / ${userEmail}`,
+          hpenBusinessUnit: buOk ? savedBU : prev.hpenBusinessUnit,
+          buRegion: buOk ? validRegion : prev.buRegion,
+        }));
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -285,11 +335,14 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
     if (!formData.customerName.trim())        errs.push('Customer Name is required.');
     if (!formData.hpenBusinessUnit)           errs.push('Business Unit is required.');
     if (!formData.buRegion)                   errs.push('Region is required.');
+    if (!formData.primarySe.includes('/'))    errs.push('Primary SE is required.');
     if (!formData.engagementPurpose)          errs.push('Engagement Purpose is required.');
     if (!formData.requestedSse.includes('/')) errs.push('Requested SSE is required — search and select a person.');
     if (!formData.notes.trim())               errs.push('Description is required.');
-    const compNoDisp = formData.landscape.some(r => isCompetitor(r.vendor) && !r.disposition);
-    if (compNoDisp)                           errs.push('For each competitor row, pick Integrate or Displace.');
+    if (formData.landscape.some(r => isCompetitor(r.vendor) && !r.disposition))
+      errs.push('For each competitor row, pick Integrate or Displace.');
+    if (formData.landscape.some(r => r.disposition === 'Integrate' && !(r.detail || '').trim()))
+      errs.push('For each Integrate row, add the integration detail (how they coexist).');
     return errs;
   };
 
@@ -320,9 +373,9 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         csePriorityReason: '',
         solutionsFocus: focusCodes.join(','),
         supportType: formData.supportType,
-        remoteTbd: formData.datesTbd, remoteStart: formData.startDate, remoteEnd: formData.endDate, remoteDuration: formData.duration,
-        onsiteTbd: formData.datesTbd, onsiteStart: '', onsiteEnd: '', onsiteDuration: '', onsiteDestination: formData.location,
-        sePrimary: `${userDisplayName} / ${userEmail}`,
+        remoteTbd: formData.datesTbd, remoteStart: formData.remoteStart, remoteEnd: formData.remoteEnd, remoteDuration: formData.remoteDuration,
+        onsiteTbd: formData.datesTbd, onsiteStart: formData.onsiteStart, onsiteEnd: formData.onsiteEnd, onsiteDuration: formData.onsiteDuration, onsiteDestination: formData.location,
+        sePrimary: formData.primarySe,
         semPrimary: semEmail, sedEmail,
         buRegion: formData.buRegion, hpenBusinessUnit: formData.hpenBusinessUnit,
         customerName: formData.customerName, pocName: '',
@@ -343,6 +396,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
 
   const buKeys     = Object.keys(buRegions).sort();
   const regionKeys = formData.hpenBusinessUnit ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort() : [];
+  const showRemote = formData.supportType === 'Remote' || formData.supportType === 'Both';
+  const showOnsite = formData.supportType === 'On-Site' || formData.supportType === 'Both';
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -354,7 +409,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         <div style={{ fontSize: 14, color: '#605e5c', marginBottom: 24 }}>
           Your request for <strong>{formData.customerName}</strong> has been submitted and will route to the SSE for scheduling.
         </div>
-        <button onClick={() => { setFormData(EMPTY_FORM); setSubmitted(false); }}
+        <button onClick={() => { setFormData({ ...EMPTY_FORM, primarySe: `${userDisplayName} / ${userEmail}` }); setSubmitted(false); }}
           style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
           Submit Another
         </button>
@@ -421,6 +476,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
             </select>
           </div>
         </div>
+        <PeoplePickerField label="Primary SE" required value={formData.primarySe} onChange={v => set('primarySe', v)} searchUsers={handleSearchUsers} />
         <PeoplePickerField label="Requested SSE" required value={formData.requestedSse} onChange={v => set('requestedSse', v)} searchUsers={handleSearchUsers} />
       </div>
 
@@ -440,7 +496,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         <SolutionLandscape rows={formData.landscape} solutions={solutions} onChange={rows => set('landscape', rows)} />
       </div>
 
-      {/* Description & Desired Outcome (moved up) */}
+      {/* Description & Desired Outcome */}
       <div style={SECTION}>
         <SectionHeader title="Description & Desired Outcome" />
         <textarea rows={4} value={formData.notes} onChange={e => set('notes', e.target.value)}
@@ -463,30 +519,15 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
           <input type="checkbox" checked={formData.datesTbd} onChange={e => set('datesTbd', e.target.checked)} style={{ accentColor: HPE_NAVY }} />
           Dates TBD / Flexible — SSE proposes times back
         </label>
-        {!formData.datesTbd && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div style={FIELD_ROW}>
-              <label style={LABEL_STYLE}>Requested Start</label>
-              <input type="date" value={formData.startDate ? formData.startDate.substring(0, 10) : ''}
-                onChange={e => set('startDate', e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-            </div>
-            <div style={FIELD_ROW}>
-              <label style={LABEL_STYLE}>Requested End</label>
-              <input type="date" value={formData.endDate ? formData.endDate.substring(0, 10) : ''}
-                onChange={e => set('endDate', e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-            </div>
-          </div>
+        {!formData.datesTbd && showRemote && (
+          <ScheduleBlock label="Remote Schedule" start={formData.remoteStart} end={formData.remoteEnd} duration={formData.remoteDuration}
+            onStart={v => set('remoteStart', v)} onEnd={v => set('remoteEnd', v)} onDuration={v => set('remoteDuration', v)} />
         )}
-        <div style={FIELD_ROW}>
-          <label style={LABEL_STYLE}>Expected Duration / Effort</label>
-          <input type="text" value={formData.duration} onChange={e => set('duration', e.target.value)} placeholder="e.g. 90-min briefing, half day on-site" style={INPUT} />
-        </div>
-        {(formData.supportType === 'On-Site' || formData.supportType === 'Both') && (
-          <div style={FIELD_ROW}>
-            <label style={LABEL_STYLE}>Location</label>
-            <input type="text" value={formData.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Denver, CO" style={INPUT} />
-          </div>
+        {!formData.datesTbd && showOnsite && (
+          <ScheduleBlock label="On-Site Schedule" start={formData.onsiteStart} end={formData.onsiteEnd} duration={formData.onsiteDuration} location={formData.location}
+            onStart={v => set('onsiteStart', v)} onEnd={v => set('onsiteEnd', v)} onDuration={v => set('onsiteDuration', v)} onLocation={v => set('location', v)} />
         )}
+        {!formData.supportType && <div style={{ fontSize: 12, color: '#888' }}>Pick a format above to set requested dates.</div>}
       </div>
 
       {/* Submit */}

@@ -33,6 +33,7 @@ export interface IEnvironmentRow {
   product: string;      // free text: their current model / product line
   version: string;      // free text: their current code / firmware version
   disposition: string;  // Disposition
+  detail: string;       // competitor coexistence (Integrate) / migration (Displace) detail
 }
 
 // Vendor taxonomy — structured for bulletproof displacement reporting.
