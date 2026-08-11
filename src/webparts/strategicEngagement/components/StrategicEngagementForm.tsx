@@ -8,8 +8,8 @@ import { ConfigService, BURegionMap, IBUConfig, IRegionConfig } from '../../../s
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import {
-  ENGAGEMENT_PURPOSES, IEnvironmentRow, OUR_VENDORS,
-  COMPETITOR_VENDORS, isDisplacement, environmentHasDisplacement,
+  ENGAGEMENT_PURPOSES, IEnvironmentRow, OUR_VENDORS, GREENFIELD_VENDOR, COMPETITOR_VENDORS,
+  isCompetitor, autoDisposition, DISPOSITION_STYLE, environmentHasDisplacement,
 } from '../../../models/StrategicEngagement';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
@@ -24,32 +24,26 @@ interface IStrategicFormData {
   buRegion: string;
   requestedSse: string;
   engagementPurpose: string;
-  environment: IEnvironmentRow[];
-  solutionsFocus: string;
-  supportType: 'Remote' | 'On-Site' | 'Both' | '';
-  remoteTbd: boolean;
-  remoteStart: string;
-  remoteEnd: string;
-  remoteDuration: string;
-  onsiteTbd: boolean;
-  onsiteStart: string;
-  onsiteEnd: string;
-  onsiteDuration: string;
-  onsiteDestination: string;
+  landscape: IEnvironmentRow[];
   notes: string;
+  supportType: 'Remote' | 'On-Site' | 'Both' | '';
+  datesTbd: boolean;
+  startDate: string;
+  endDate: string;
+  duration: string;
+  location: string;
   csePriority: string;
   opportunityAmount: number;
 }
 
 const EMPTY_FORM: IStrategicFormData = {
   customerName: '', hpenBusinessUnit: '', buRegion: '', requestedSse: '',
-  engagementPurpose: '', environment: [], solutionsFocus: '', supportType: '',
-  remoteTbd: false, remoteStart: '', remoteEnd: '', remoteDuration: '',
-  onsiteTbd: false, onsiteStart: '', onsiteEnd: '', onsiteDuration: '', onsiteDestination: '',
-  notes: '', csePriority: '', opportunityAmount: 0,
+  engagementPurpose: '', landscape: [], notes: '',
+  supportType: '', datesTbd: false, startDate: '', endDate: '', duration: '', location: '',
+  csePriority: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -68,6 +62,7 @@ const SECTION: React.CSSProperties = { background: '#fff', border: '1px solid #e
 const FIELD_ROW: React.CSSProperties = { marginBottom: 10 };
 const LABEL_STYLE: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#323130', marginBottom: 4 };
 const INPUT: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 3, fontFamily: 'inherit' };
+const CELL_INPUT: React.CSSProperties = { ...INPUT, padding: '5px 6px', fontSize: 12 };
 const TOGGLE_BTN = (active: boolean): React.CSSProperties => ({
   padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 4,
   border: `1px solid ${active ? HPE_NAVY : '#ccc'}`, background: active ? HPE_NAVY : '#fff',
@@ -155,58 +150,83 @@ const PeoplePickerField: React.FC<{
   );
 };
 
-// ── EnvironmentRows — current environment / competitive landscape ──────────────
-const EnvironmentRows: React.FC<{
+// ── SolutionLandscape — what we position + what they run + disposition ─────────
+const SolutionLandscape: React.FC<{
   rows: IEnvironmentRow[];
-  areas: string[];
+  solutions: ISolutionDef[];
   onChange: (rows: IEnvironmentRow[]) => void;
-}> = ({ rows, areas, onChange }) => {
-  const update = (i: number, patch: Partial<IEnvironmentRow>): void => {
-    const next = rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
-    onChange(next);
+}> = ({ rows, solutions, onChange }) => {
+  const cats = Array.from(new Set(solutions.map(s => s.category)));
+  const update = (i: number, patch: Partial<IEnvironmentRow>): void =>
+    onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const setSolution = (i: number, code: string): void => {
+    const sol = solutions.filter(s => s.code === code)[0];
+    update(i, { solutionCode: code, solution: sol ? sol.name : '' });
   };
+  const setVendor = (i: number, vendor: string): void =>
+    update(i, { vendor, disposition: autoDisposition(vendor) });
   const remove = (i: number): void => onChange(rows.filter((_, idx) => idx !== i));
-  const add = (): void => onChange([...rows, { area: '', vendor: '', product: '', version: '' }]);
+  const add = (): void => onChange([...rows, { solutionCode: '', solution: '', vendor: '', product: '', version: '', disposition: '' }]);
+
+  const GRID = '1.4fr 1.1fr 1fr 0.7fr 132px 28px';
 
   return (
     <div>
       {rows.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.2fr 0.8fr auto auto', gap: 6, alignItems: 'center', marginBottom: 4, fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-          <div>Solution Area</div><div>Vendor</div><div>Product / Model</div><div>Version</div><div /><div />
+        <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, alignItems: 'center', marginBottom: 4, fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+          <div>Solution (we position)</div><div>Current Vendor</div><div>Product / Model</div><div>Version</div><div>Disposition</div><div />
         </div>
       )}
       {rows.map((row, i) => {
-        const displacement = isDisplacement(row.vendor);
+        const comp = isCompetitor(row.vendor);
+        const badge = DISPOSITION_STYLE[row.disposition];
         return (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.2fr 0.8fr auto auto', gap: 6, alignItems: 'center', marginBottom: 6 }}>
-            <select value={row.area} onChange={e => update(i, { area: e.target.value })} style={{ ...INPUT, padding: '5px 6px' }}>
-              <option value="">— Area —</option>
-              {areas.map(a => <option key={a} value={a}>{a}</option>)}
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, alignItems: 'center', marginBottom: 6 }}>
+            <select value={row.solutionCode} onChange={e => setSolution(i, e.target.value)} style={CELL_INPUT}>
+              <option value="">— Solution —</option>
+              {cats.map(cat => (
+                <optgroup key={cat} label={cat}>
+                  {solutions.filter(s => s.category === cat).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}
+                </optgroup>
+              ))}
             </select>
-            <select value={row.vendor} onChange={e => update(i, { vendor: e.target.value })} style={{ ...INPUT, padding: '5px 6px' }}>
+            <select value={row.vendor} onChange={e => setVendor(i, e.target.value)} style={CELL_INPUT}>
               <option value="">— Vendor —</option>
-              <optgroup label="HPE (ours)">
-                {OUR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}
-              </optgroup>
-              <optgroup label="Competitors">
-                {COMPETITOR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}
-              </optgroup>
+              <optgroup label="HPE (ours)">{OUR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}</optgroup>
+              <optgroup label="Greenfield"><option value={GREENFIELD_VENDOR}>{GREENFIELD_VENDOR}</option></optgroup>
+              <optgroup label="Competitors">{COMPETITOR_VENDORS.map(v => <option key={v} value={v}>{v}</option>)}</optgroup>
             </select>
-            <input type="text" value={row.product} onChange={e => update(i, { product: e.target.value })} placeholder="e.g. Catalyst 9300" style={{ ...INPUT, padding: '5px 6px' }} />
-            <input type="text" value={row.version} onChange={e => update(i, { version: e.target.value })} placeholder="e.g. 17.9" style={{ ...INPUT, padding: '5px 6px' }} />
-            <span style={{ fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 8,
-              background: !row.vendor ? '#f0f0f0' : displacement ? '#fde7e9' : '#e8faf3',
-              color: !row.vendor ? '#a19f9d' : displacement ? '#a4262c' : '#107c10' }}>
-              {!row.vendor ? '—' : displacement ? '🎯 Displace' : '✅ Expand'}
-            </span>
+            <input type="text" value={row.product} onChange={e => update(i, { product: e.target.value })} placeholder="e.g. Catalyst 9300" style={CELL_INPUT} />
+            <input type="text" value={row.version} onChange={e => update(i, { version: e.target.value })} placeholder="17.9" style={CELL_INPUT} />
+            {/* Disposition */}
+            {comp ? (
+              <div style={{ display: 'flex', gap: 3 }}>
+                {(['Integrate', 'Displace'] as const).map(d => {
+                  const active = row.disposition === d;
+                  const c = DISPOSITION_STYLE[d];
+                  return (
+                    <button key={d} type="button" onClick={() => update(i, { disposition: d })}
+                      style={{ flex: 1, fontSize: 10, fontWeight: 700, padding: '3px 2px', borderRadius: 4, cursor: 'pointer',
+                        border: `1px solid ${active ? c.color : '#ccc'}`, background: active ? c.bg : '#fff', color: active ? c.color : '#888' }}>
+                      {d === 'Integrate' ? '🤝 Integ.' : '🎯 Displ.'}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 700, textAlign: 'center', padding: '2px 4px', borderRadius: 8, whiteSpace: 'nowrap',
+                background: badge ? badge.bg : '#f0f0f0', color: badge ? badge.color : '#a19f9d' }}>
+                {badge ? badge.label : '—'}
+              </span>
+            )}
             <button type="button" onClick={() => remove(i)} title="Remove row"
-              style={{ background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#a4262c', fontSize: 13, lineHeight: 1, padding: '4px 8px' }}>✕</button>
+              style={{ background: 'transparent', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#a4262c', fontSize: 12, lineHeight: 1, padding: '4px 6px' }}>✕</button>
           </div>
         );
       })}
       <button type="button" onClick={add}
         style={{ marginTop: 4, padding: '6px 14px', fontSize: 12, fontWeight: 600, background: '#fff', color: HPE_NAVY, border: `1px dashed ${HPE_NAVY}`, borderRadius: 4, cursor: 'pointer' }}>
-        + Add {rows.length === 0 ? 'current solution / competitor' : 'another'}
+        + Add {rows.length === 0 ? 'solution' : 'another'}
       </button>
     </div>
   );
@@ -268,6 +288,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
     if (!formData.engagementPurpose)          errs.push('Engagement Purpose is required.');
     if (!formData.requestedSse.includes('/')) errs.push('Requested SSE is required — search and select a person.');
     if (!formData.notes.trim())               errs.push('Description is required.');
+    const compNoDisp = formData.landscape.some(r => isCompetitor(r.vendor) && !r.disposition);
+    if (compNoDisp)                           errs.push('For each competitor row, pick Integrate or Displace.');
     return errs;
   };
 
@@ -280,8 +302,9 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       const regionCfg: IRegionConfig = buConfig?.regions[formData.buRegion] || {};
       const semEmail   = regionCfg.semEmail || '';
       const sedEmail   = buConfig?.sedEmail || '';
-      const cleanRows  = formData.environment.filter(r => r.area || r.vendor || r.product || r.version);
-      const schedStatus = (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' as const : 'Dates Proposed' as const;
+      const rows       = formData.landscape.filter(r => r.solutionCode || r.vendor || r.product || r.version);
+      const focusCodes = Array.from(new Set(rows.map(r => r.solutionCode).filter(Boolean)));
+      const schedStatus = formData.datesTbd ? 'TBD' as const : 'Dates Proposed' as const;
 
       const svc = new CseRequestService(sp);
       await svc.create({
@@ -295,10 +318,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         cseDescription: formData.notes,
         csePriority: formData.csePriority || 'Medium',
         csePriorityReason: '',
-        solutionsFocus: formData.solutionsFocus,
+        solutionsFocus: focusCodes.join(','),
         supportType: formData.supportType,
-        remoteTbd: formData.remoteTbd, remoteStart: formData.remoteStart, remoteEnd: formData.remoteEnd, remoteDuration: formData.remoteDuration,
-        onsiteTbd: formData.onsiteTbd, onsiteStart: formData.onsiteStart, onsiteEnd: formData.onsiteEnd, onsiteDuration: formData.onsiteDuration, onsiteDestination: formData.onsiteDestination,
+        remoteTbd: formData.datesTbd, remoteStart: formData.startDate, remoteEnd: formData.endDate, remoteDuration: formData.duration,
+        onsiteTbd: formData.datesTbd, onsiteStart: '', onsiteEnd: '', onsiteDuration: '', onsiteDestination: formData.location,
         sePrimary: `${userDisplayName} / ${userEmail}`,
         semPrimary: semEmail, sedEmail,
         buRegion: formData.buRegion, hpenBusinessUnit: formData.hpenBusinessUnit,
@@ -306,11 +329,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         opportunityAmount: formData.opportunityAmount,
         custTemp: 'Normal', signedOffBy: '', signOffDate: '',
         opportunity: '', notes: formData.notes, specialtyType: '',
-        // Strategic Engagement fields
         engagementType: 'Strategic Engagement',
         engagementPurpose: formData.engagementPurpose,
-        currentEnvironment: JSON.stringify(cleanRows),
-        hasDisplacement: environmentHasDisplacement(cleanRows),
+        currentEnvironment: JSON.stringify(rows),
+        hasDisplacement: environmentHasDisplacement(rows),
         engagementOutcome: 'Advisory Only',
       });
       setSubmitted(true);
@@ -321,8 +343,6 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
 
   const buKeys     = Object.keys(buRegions).sort();
   const regionKeys = formData.hpenBusinessUnit ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort() : [];
-  const focusCodes = formData.solutionsFocus ? formData.solutionsFocus.split(',').map(c => c.trim()).filter(Boolean) : [];
-  const areas: string[] = Array.from(new Set(solutions.map(s => s.category)));
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -343,7 +363,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   }
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
+    <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
       {/* Header */}
       <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -414,28 +434,18 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         </div>
       </div>
 
-      {/* Current Environment & Competitive Landscape */}
+      {/* Solution Landscape */}
       <div style={SECTION}>
-        <SectionHeader title="Current Environment & Competitive Landscape" hint="What does the customer run today? Flag competitors we could displace — the more detail, the sharper the SSE's prep." />
-        <EnvironmentRows rows={formData.environment} areas={areas} onChange={rows => set('environment', rows)} />
+        <SectionHeader title="Solution Landscape" hint="What we'd position, what the customer runs today, and whether we're expanding, integrating, or displacing. Pick 'None / Greenfield' for net-new." />
+        <SolutionLandscape rows={formData.landscape} solutions={solutions} onChange={rows => set('landscape', rows)} />
       </div>
 
-      {/* Solutions Focus */}
+      {/* Description & Desired Outcome (moved up) */}
       <div style={SECTION}>
-        <SectionHeader title="Solutions Focus" hint="What we'd position in the conversation" />
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px' }}>
-          {solutions.map(sol => {
-            const checked = focusCodes.includes(sol.code);
-            return (
-              <label key={sol.code} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
-                <input type="checkbox" checked={checked}
-                  onChange={e => { const next = e.target.checked ? [...focusCodes, sol.code] : focusCodes.filter(c => c !== sol.code); set('solutionsFocus', next.join(',')); }}
-                  style={{ accentColor: HPE_GREEN }} />
-                {sol.name}
-              </label>
-            );
-          })}
-        </div>
+        <SectionHeader title="Description & Desired Outcome" />
+        <textarea rows={4} value={formData.notes} onChange={e => set('notes', e.target.value)}
+          placeholder="What should the SSE prepare for? Audience (exec / technical), the customer's situation, the outcome you're driving toward…"
+          style={{ ...INPUT, resize: 'vertical' }} />
       </div>
 
       {/* Time Coordination */}
@@ -449,36 +459,34 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
             ))}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div style={FIELD_ROW}>
-            <label style={LABEL_STYLE}>Requested Start</label>
-            <input type="date" value={formData.remoteStart ? formData.remoteStart.substring(0, 10) : ''}
-              onChange={e => set('remoteStart', e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#323130', marginBottom: 10 }}>
+          <input type="checkbox" checked={formData.datesTbd} onChange={e => set('datesTbd', e.target.checked)} style={{ accentColor: HPE_NAVY }} />
+          Dates TBD / Flexible — SSE proposes times back
+        </label>
+        {!formData.datesTbd && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={FIELD_ROW}>
+              <label style={LABEL_STYLE}>Requested Start</label>
+              <input type="date" value={formData.startDate ? formData.startDate.substring(0, 10) : ''}
+                onChange={e => set('startDate', e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+            </div>
+            <div style={FIELD_ROW}>
+              <label style={LABEL_STYLE}>Requested End</label>
+              <input type="date" value={formData.endDate ? formData.endDate.substring(0, 10) : ''}
+                onChange={e => set('endDate', e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+            </div>
           </div>
-          <div style={FIELD_ROW}>
-            <label style={LABEL_STYLE}>Requested End</label>
-            <input type="date" value={formData.remoteEnd ? formData.remoteEnd.substring(0, 10) : ''}
-              onChange={e => set('remoteEnd', e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-          </div>
-        </div>
+        )}
         <div style={FIELD_ROW}>
           <label style={LABEL_STYLE}>Expected Duration / Effort</label>
-          <input type="text" value={formData.remoteDuration} onChange={e => set('remoteDuration', e.target.value)} placeholder="e.g. 90-min briefing, half day on-site" style={INPUT} />
+          <input type="text" value={formData.duration} onChange={e => set('duration', e.target.value)} placeholder="e.g. 90-min briefing, half day on-site" style={INPUT} />
         </div>
         {(formData.supportType === 'On-Site' || formData.supportType === 'Both') && (
           <div style={FIELD_ROW}>
             <label style={LABEL_STYLE}>Location</label>
-            <input type="text" value={formData.onsiteDestination} onChange={e => set('onsiteDestination', e.target.value)} placeholder="e.g. Denver, CO" style={INPUT} />
+            <input type="text" value={formData.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Denver, CO" style={INPUT} />
           </div>
         )}
-      </div>
-
-      {/* Description */}
-      <div style={SECTION}>
-        <SectionHeader title="Description & Desired Outcome" />
-        <textarea rows={4} value={formData.notes} onChange={e => set('notes', e.target.value)}
-          placeholder="What should the SSE prepare for? Audience (exec / technical), the customer's situation, the outcome you're driving toward…"
-          style={{ ...INPUT, resize: 'vertical' }} />
       </div>
 
       {/* Submit */}
