@@ -86,16 +86,18 @@ const DEMO_SCENARIOS: IDemoScenario[] = [
     ],
   },
   {
-    name: 'Juniper/Mist expansion',
+    name: 'Mist replaces Meraki (Cisco integrate)',
     customerName: 'Globex Industries',
-    engagementPurpose: 'Roadmap / Product Direction',
+    engagementPurpose: 'Architecture / Exec Conversation',
     requestedSse: DEMO_SSE,
-    notes: 'Existing Mist wireless customer evaluating where the AI-driven roadmap goes next — wired assurance and NAC. Trusted-advisor conversation to deepen the footprint and pre-empt a competitive look.',
-    desiredOutcomes: ['Establish trusted-advisor relationship', "Shape the requirements / get spec'd in"],
+    notes: 'Globex keeps its Cisco Catalyst 9300 switching core but wants a new Mist AI WLAN to replace its aging Cisco Meraki wireless. They already run HPE Aruba ClearPass for NAC — the engagement must prove ClearPass and the new Mist WLAN interoperate cleanly with the retained Catalyst switches. Technical + architecture audience; the ask is a credible interoperability + migration story before they commit.',
+    desiredOutcomes: ['Prove the proposed solution', 'Displace the incumbent'],
     supportType: 'Remote', remoteDuration: '90-min briefing',
     csePriority: 'Medium', opportunityAmount: 300000,
     rows: [
-      { code: 'MWRL', vendor: 'Juniper (HPE)', disposition: 'Expansion', product: 'AP45', version: '', detail: '' },
+      { code: '', vendor: 'Cisco', disposition: 'Integrate', product: 'Catalyst 9300', version: '17.9', detail: 'Customer retains the Catalyst 9300 access/core. The new Mist WLAN and existing ClearPass NAC must interoperate across the mixed fabric — 802.1X / RADIUS, dynamic segmentation, and consistent policy enforcement on the Cisco switch ports.' },
+      { code: 'MWRL', vendor: 'Cisco Meraki', disposition: 'Displace', product: 'MR44 / MR46', version: '', detail: 'Replace the Meraki wireless estate with a new Mist AI deployment; ClearPass enforcement policy must carry over to the Mist WLAN.' },
+      { code: 'NSCP', vendor: 'HPE Aruba', disposition: 'Expansion', product: 'ClearPass Policy Manager', version: '', detail: '' },
     ],
   },
   {
