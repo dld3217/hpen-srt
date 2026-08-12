@@ -856,7 +856,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   };
 
   return (
-    <div style={{ fontFamily: 'inherit', minHeight: 400, position: 'relative', width: '98vw', maxWidth: '98vw', left: '50%', transform: 'translateX(-50%)' }}>
+    <div style={{ fontFamily: 'inherit', minHeight: 400, width: '100%' }}>
 
       {showAdmin && <SrtAdminPanel sp={sp} context={context} onClose={() => setShowAdmin(false)} />}
 
