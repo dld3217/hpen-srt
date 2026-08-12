@@ -17,6 +17,7 @@ import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 export interface IStrategicEngagementFormProps {
   sp: SPFI;
   context: WebPartContext;
+  onBack?: () => void;
 }
 
 interface IStrategicFormData {
@@ -285,7 +286,7 @@ const SolutionLandscape: React.FC<{
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = ({ sp, context }) => {
+export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = ({ sp, context, onBack }) => {
   const [loading, setLoading]         = useState(true);
   const [buRegions, setBuRegions]     = useState<BURegionMap>({});
   const [solutions, setSolutions]     = useState<ISolutionDef[]>(SOLUTIONS);
@@ -435,6 +436,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
+      {onBack && (
+        <button type="button" onClick={onBack}
+          style={{ background: 'none', border: 'none', color: HPE_NAVY, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: 4 }}>← Back to options</button>
+      )}
       {/* Header */}
       <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

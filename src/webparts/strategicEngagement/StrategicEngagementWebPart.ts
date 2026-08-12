@@ -8,7 +8,7 @@ import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
 
-import { StrategicEngagementForm, IStrategicEngagementFormProps } from './components/StrategicEngagementForm';
+import { SseFrontDoor, ISseFrontDoorProps } from './components/SseFrontDoor';
 
 export interface IStrategicEngagementWebPartProps {
   description: string;
@@ -23,7 +23,7 @@ export default class StrategicEngagementWebPart extends BaseClientSideWebPart<IS
   }
 
   public render(): void {
-    const element: React.ReactElement<IStrategicEngagementFormProps> = React.createElement(StrategicEngagementForm, {
+    const element: React.ReactElement<ISseFrontDoorProps> = React.createElement(SseFrontDoor, {
       sp: this._sp,
       context: this.context,
     });

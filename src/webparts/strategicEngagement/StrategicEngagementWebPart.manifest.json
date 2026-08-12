@@ -14,8 +14,8 @@
   "preconfiguredEntries": [{
     "groupId": "5c03119e-3074-46fd-976b-c60198311f70",
     "group": { "default": "Advanced" },
-    "title": { "default": "Strategic Engagement Request" },
-    "description": { "default": "HPEN SSE strategic engagement request (non-POC advisory)" },
+    "title": { "default": "SSE Request (Front Door)" },
+    "description": { "default": "HPEN SSE request front door — New POC / Modify POC / Strategic Engagement" },
     "officeFabricIconFontName": "Bullseye",
     "properties": {
       "description": "Strategic Engagement Request"
