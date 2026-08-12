@@ -19,6 +19,20 @@ export const ENGAGEMENT_PURPOSES: EngagementPurpose[] = [
   'Other',
 ];
 
+// Desired Outcome — multi-select goal(s) for the engagement (blended audiences can have several).
+export const OUTCOME_OBJECTION = 'Overcome a specific objection';
+export const OUTCOME_OTHER = 'Other';
+export const DESIRED_OUTCOMES: string[] = [
+  'Prove the proposed solution',
+  'Advance to a purchase order',
+  'Educate the executive team',
+  "Shape the requirements / get spec'd in",
+  'Displace the incumbent',
+  'Establish trusted-advisor relationship',
+  OUTCOME_OBJECTION,
+  OUTCOME_OTHER,
+];
+
 export type EngagementOutcome = 'Advisory Only' | 'Spawned New POC' | 'Modified Existing POC';
 
 // Disposition of each solution line relative to the customer's current landscape.

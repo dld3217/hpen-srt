@@ -8,7 +8,8 @@ import { ConfigService, BURegionMap, IBUConfig, IRegionConfig } from '../../../s
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import {
-  ENGAGEMENT_PURPOSES, IEnvironmentRow, OUR_VENDORS, GREENFIELD_VENDOR, COMPETITOR_VENDORS,
+  ENGAGEMENT_PURPOSES, DESIRED_OUTCOMES, OUTCOME_OBJECTION, OUTCOME_OTHER, IEnvironmentRow,
+  OUR_VENDORS, GREENFIELD_VENDOR, COMPETITOR_VENDORS,
   isCompetitor, autoDisposition, DISPOSITION_STYLE, environmentHasDisplacement,
 } from '../../../models/StrategicEngagement';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
@@ -27,6 +28,9 @@ interface IStrategicFormData {
   engagementPurpose: string;
   landscape: IEnvironmentRow[];
   notes: string;
+  desiredOutcomes: string[];
+  objectionText: string;
+  outcomeOtherText: string;
   supportType: 'Remote' | 'On-Site' | 'Both' | '';
   datesTbd: boolean;
   remoteStart: string;
@@ -43,13 +47,14 @@ interface IStrategicFormData {
 const EMPTY_FORM: IStrategicFormData = {
   customerName: '', hpenBusinessUnit: '', buRegion: '', primarySe: '', requestedSse: '',
   engagementPurpose: '', landscape: [], notes: '',
+  desiredOutcomes: [], objectionText: '', outcomeOtherText: '',
   supportType: '', datesTbd: false,
   remoteStart: '', remoteEnd: '', remoteDuration: '',
   onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
   csePriority: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -343,6 +348,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       errs.push('For each competitor row, pick Integrate or Displace.');
     if (formData.landscape.some(r => r.disposition === 'Integrate' && !(r.detail || '').trim()))
       errs.push('For each Integrate row, add the integration detail (how they coexist).');
+    if (formData.desiredOutcomes.indexOf(OUTCOME_OBJECTION) !== -1 && !formData.objectionText.trim())
+      errs.push('List the specific objection(s) to overcome.');
     return errs;
   };
 
@@ -387,6 +394,11 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         currentEnvironment: JSON.stringify(rows),
         hasDisplacement: environmentHasDisplacement(rows),
         engagementOutcome: 'Advisory Only',
+        desiredOutcome: formData.desiredOutcomes.join(', '),
+        desiredOutcomeDetail: [
+          formData.objectionText.trim() ? `Objection(s): ${formData.objectionText.trim()}` : '',
+          formData.outcomeOtherText.trim() ? `Other: ${formData.outcomeOtherText.trim()}` : '',
+        ].filter(Boolean).join(' | '),
       });
       setSubmitted(true);
     } catch (err) {
@@ -490,18 +502,51 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         </div>
       </div>
 
+      {/* Description */}
+      <div style={SECTION}>
+        <SectionHeader title="Description" hint="What should the SSE prepare for? Audience, the customer's situation, relevant context." />
+        <textarea rows={4} value={formData.notes} onChange={e => set('notes', e.target.value)}
+          placeholder="Audience (exec / technical), the customer's situation, and any context that sharpens the SSE's prep…"
+          style={{ ...INPUT, resize: 'vertical' }} />
+      </div>
+
+      {/* Desired Outcome */}
+      <div style={SECTION}>
+        <SectionHeader title="Desired Outcome" hint="What are you driving toward? Pick all that apply — a blended audience can have several." />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {DESIRED_OUTCOMES.map(o => {
+            const active = formData.desiredOutcomes.indexOf(o) !== -1;
+            return (
+              <button key={o} type="button"
+                onClick={() => setFormData(prev => ({
+                  ...prev,
+                  desiredOutcomes: active ? prev.desiredOutcomes.filter(x => x !== o) : [...prev.desiredOutcomes, o],
+                }))}
+                style={TOGGLE_BTN(active)}>{active ? '✓ ' : ''}{o}</button>
+            );
+          })}
+        </div>
+        {formData.desiredOutcomes.indexOf(OUTCOME_OBJECTION) !== -1 && (
+          <div style={{ marginTop: 10 }}>
+            <label style={LABEL_STYLE}>Specific objection(s) to overcome <span style={{ color: '#d13438' }}>*</span></label>
+            <textarea rows={2} value={formData.objectionText} onChange={e => set('objectionText', e.target.value)}
+              placeholder="List the specific objection(s) the SSE needs to address…"
+              style={{ ...INPUT, resize: 'vertical', borderColor: !formData.objectionText.trim() ? '#d13438' : '#ccc', background: !formData.objectionText.trim() ? '#fef6f6' : '#fff' }} />
+          </div>
+        )}
+        {formData.desiredOutcomes.indexOf(OUTCOME_OTHER) !== -1 && (
+          <div style={{ marginTop: 10 }}>
+            <label style={LABEL_STYLE}>Other desired outcome</label>
+            <input type="text" value={formData.outcomeOtherText} onChange={e => set('outcomeOtherText', e.target.value)}
+              placeholder="Describe the other outcome…" style={INPUT} />
+          </div>
+        )}
+      </div>
+
       {/* Solution Landscape */}
       <div style={SECTION}>
         <SectionHeader title="Solution Landscape" hint="What we'd position, what the customer runs today, and whether we're expanding, integrating, or displacing. Pick 'None / Greenfield' for net-new." />
         <SolutionLandscape rows={formData.landscape} solutions={solutions} onChange={rows => set('landscape', rows)} />
-      </div>
-
-      {/* Description & Desired Outcome */}
-      <div style={SECTION}>
-        <SectionHeader title="Description & Desired Outcome" />
-        <textarea rows={4} value={formData.notes} onChange={e => set('notes', e.target.value)}
-          placeholder="What should the SSE prepare for? Audience (exec / technical), the customer's situation, the outcome you're driving toward…"
-          style={{ ...INPUT, resize: 'vertical' }} />
       </div>
 
       {/* Time Coordination */}
