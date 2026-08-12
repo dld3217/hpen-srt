@@ -122,7 +122,7 @@ export class CseRequestService {
       CurrentEnvironment: req.currentEnvironment || '',
       HasDisplacement: !!req.hasDisplacement,
       EngagementOutcome: req.engagementOutcome || '',
-      DesiredOutcome: { results: req.desiredOutcome || [] },
+      DesiredOutcome: req.desiredOutcome || [],
       DesiredOutcomeDetail: req.desiredOutcomeDetail || '',
       EngagementPurposeOther: req.engagementPurposeOther || '',
     });
