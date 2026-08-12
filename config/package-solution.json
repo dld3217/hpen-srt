@@ -3,7 +3,7 @@
   "solution": {
     "name": "hpen-srt-client-side-solution",
     "id": "62d11a5a-c225-413d-b10d-53ff6647595b",
-    "version": "1.0.83.0",
+    "version": "1.0.84.0",
     "includeClientSideAssets": true,
     "skipFeatureDeployment": true,
     "isDomainIsolated": false,

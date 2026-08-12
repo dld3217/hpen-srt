@@ -68,7 +68,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.66';
+const VERSION = '1.0.70';
 
 const TH: React.CSSProperties = {
   padding: '7px 7px', textAlign: 'left', fontSize: 11, fontWeight: 700,
