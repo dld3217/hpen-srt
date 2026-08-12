@@ -13,7 +13,7 @@ export interface ISrtInsightsProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx';
 
 const parseEnv = (r: ICseRequest): IEnvironmentRow[] => {
@@ -53,6 +53,7 @@ const Bar: React.FC<{ label: string; count: number; max: number; color: string }
 export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<ICseRequest[]>([]);
+  const [sseSort, setSseSort] = useState<{ field: 'name' | 'active' | 'strategic' | 'poc'; dir: 'asc' | 'desc' }>({ field: 'active', dir: 'desc' });
 
   useEffect(() => {
     new CseRequestService(sp).getAll()
@@ -90,7 +91,13 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
     a.active += 1; if (isStrategic(r)) a.strategic += 1; else a.poc += 1;
     sseAgg[n] = a;
   });
-  const sseRows = Object.keys(sseAgg).map(n => ({ name: n, ...sseAgg[n] })).sort((a, b) => b.active - a.active);
+  const sseRows = Object.keys(sseAgg).map(n => ({ name: n, ...sseAgg[n] })).sort((a, b) => {
+    const cmp = sseSort.field === 'name' ? a.name.localeCompare(b.name) : (a[sseSort.field] as number) - (b[sseSort.field] as number);
+    return sseSort.dir === 'asc' ? cmp : -cmp;
+  });
+  const sseSortClick = (field: 'name' | 'active' | 'strategic' | 'poc'): void =>
+    setSseSort(prev => prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: field === 'name' ? 'asc' : 'desc' });
+  const sseIcon = (field: string): string => sseSort.field !== field ? ' ⇅' : sseSort.dir === 'asc' ? ' ▲' : ' ▼';
 
   // Desired outcome distribution (strategic only)
   const outcomeAgg: Record<string, number> = {};
@@ -140,7 +147,12 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
         <div style={SECTION_TITLE}>SSE Workload — active engagements</div>
         {sseRows.length === 0 ? <div style={{ fontSize: 13, color: '#888' }}>No active engagements.</div> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={TH}>SSE</th><th style={{ ...TH, textAlign: 'right' }}>Active</th><th style={{ ...TH, textAlign: 'right' }}>Strategic</th><th style={{ ...TH, textAlign: 'right' }}>POC Support</th></tr></thead>
+            <thead><tr>
+              <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => sseSortClick('name')}>SSE{sseIcon('name')}</th>
+              <th style={{ ...TH, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => sseSortClick('active')}>Active{sseIcon('active')}</th>
+              <th style={{ ...TH, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => sseSortClick('strategic')}>Strategic{sseIcon('strategic')}</th>
+              <th style={{ ...TH, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => sseSortClick('poc')}>POC Support{sseIcon('poc')}</th>
+            </tr></thead>
             <tbody>
               {sseRows.map(s => (
                 <tr key={s.name}>
