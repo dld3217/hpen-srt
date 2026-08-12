@@ -25,6 +25,14 @@
           "manifest": "./src/webparts/strategicEngagement/StrategicEngagementWebPart.manifest.json"
         }
       ]
+    },
+    "srt-insights-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/srtInsights/SrtInsightsWebPart.js",
+          "manifest": "./src/webparts/srtInsights/SrtInsightsWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx/client-side-web-part-manifest.schema.json",
+  "id": "429e9c3e-c276-4fda-9abf-01ed0b6b0b6a",
+  "alias": "SrtInsightsWebPart",
+  "componentType": "WebPart",
+
+  "version": "*",
+  "manifestVersion": 2,
+
+  "requiresCustomScript": false,
+  "supportedHosts": ["SharePointWebPart", "SharePointFullPage"],
+  "supportsThemeVariants": true,
+
+  "preconfiguredEntries": [{
+    "groupId": "5c03119e-3074-46fd-976b-c60198311f70",
+    "group": { "default": "Advanced" },
+    "title": { "default": "SSE Demand Insights" },
+    "description": { "default": "Management analytics — SSE demand split, workload/capacity, and competitive displacement pipeline" },
+    "officeFabricIconFontName": "BarChartVertical",
+    "properties": {
+      "description": "SSE Demand Insights"
+    }
+  }]
+}
