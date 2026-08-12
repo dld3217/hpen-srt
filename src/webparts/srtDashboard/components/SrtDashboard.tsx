@@ -71,11 +71,11 @@ export interface ISrtDashboardProps {
 const VERSION = '1.0.66';
 
 const TH: React.CSSProperties = {
-  padding: '8px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700,
+  padding: '7px 7px', textAlign: 'left', fontSize: 11, fontWeight: 700,
   textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap',
 };
 const TD: React.CSSProperties = {
-  padding: '8px 10px', verticalAlign: 'top',
+  padding: '7px 7px', verticalAlign: 'top',
 };
 
 export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
@@ -848,7 +848,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   };
 
   return (
-    <div style={{ fontFamily: 'inherit', minHeight: 400 }}>
+    <div style={{ fontFamily: 'inherit', minHeight: 400, position: 'relative', width: '98vw', maxWidth: '98vw', left: '50%', transform: 'translateX(-50%)' }}>
 
       {showAdmin && <SrtAdminPanel sp={sp} context={context} onClose={() => setShowAdmin(false)} />}
 

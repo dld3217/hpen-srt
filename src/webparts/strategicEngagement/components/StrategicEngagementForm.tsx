@@ -44,6 +44,7 @@ interface IStrategicFormData {
   onsiteDuration: string;
   location: string;
   csePriority: string;
+  csePriorityReason: string;
   opportunityAmount: number;
 }
 
@@ -54,10 +55,10 @@ const EMPTY_FORM: IStrategicFormData = {
   supportType: '', remoteTbd: false, onsiteTbd: false,
   remoteStart: '', remoteEnd: '', remoteDuration: '1-hour meeting',
   onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
-  csePriority: '', opportunityAmount: 0,
+  csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.6';
+const VERSION = '1.0.7';
 
 // Quick-pick duration presets per schedule format (SE can still type a custom value)
 const REMOTE_PRESETS = ['30-min call', '1-hour meeting', '2-hour session', 'Half day'];
@@ -71,7 +72,7 @@ interface IDemoScenario {
   name: string; customerName: string; engagementPurpose: string;
   requestedSse: string; notes: string; desiredOutcomes: string[];
   supportType: 'Remote' | 'On-Site' | 'Both'; datesTbd?: boolean; location?: string;
-  remoteDuration?: string; onsiteDuration?: string; csePriority: string; opportunityAmount: number;
+  remoteDuration?: string; onsiteDuration?: string; csePriority: string; priorityReason?: string; opportunityAmount: number;
   rows: IDemoRow[];
 }
 const DEMO_SSE = 'Charlie Clemmer / charlie.clemmer@hpe.com';
@@ -84,7 +85,7 @@ const DEMO_SCENARIOS: IDemoScenario[] = [
     notes: 'Cisco Catalyst estate hits end-of-support next fiscal year. Exec + network-architecture audience wants a migration roadmap to HPE Aruba CX plus a story for their Meraki wireless. Competitive displacement play — Cisco incumbent 8+ years.',
     desiredOutcomes: ['Displace the incumbent', 'Prove the proposed solution'],
     supportType: 'On-Site', location: 'Denver, CO', onsiteDuration: 'Full-day workshop',
-    csePriority: 'High', opportunityAmount: 850000,
+    csePriority: 'High', priorityReason: 'Catalyst support expires end of next fiscal year — customer needs the migration roadmap before their budget lock in Q3.', opportunityAmount: 850000,
     rows: [
       { code: 'HCXS', vendor: 'Cisco', disposition: 'Displace', product: 'Catalyst 9300', version: '17.9', detail: 'Catalyst 9300 fabric EOL FY27; migrate access + core to CX 8100/8360 over 3 phases.' },
       { code: 'HWRL', vendor: 'Cisco Meraki', disposition: 'Displace', product: 'MR46', version: '', detail: 'Meraki wireless up for renewal; position AOS10 to consolidate licensing.' },
@@ -437,6 +438,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       onsiteDuration: s.onsiteDuration || '',
       location: s.location || '',
       csePriority: s.csePriority,
+      csePriorityReason: s.priorityReason || '',
       opportunityAmount: s.opportunityAmount,
     });
     setValidationErrors([]); setSubmitError('');
@@ -475,6 +477,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       errs.push('For each Integrate row, add the integration detail (how they coexist).');
     if (formData.desiredOutcomes.indexOf(OUTCOME_OBJECTION) !== -1 && !formData.objectionText.trim())
       errs.push('List the specific objection(s) to overcome.');
+    if ((formData.csePriority === 'High' || formData.csePriority === 'Critical') && !formData.csePriorityReason.trim())
+      errs.push(`Explain why this is ${formData.csePriority} priority.`);
     return errs;
   };
 
@@ -505,7 +509,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         sseManagerEmail: '',
         cseDescription: formData.notes,
         csePriority: formData.csePriority || 'Medium',
-        csePriorityReason: '',
+        csePriorityReason: formData.csePriorityReason,
         solutionsFocus: focusCodes.join(','),
         supportType: formData.supportType,
         remoteTbd: formData.remoteTbd, remoteStart: formData.remoteTbd ? '' : formData.remoteStart, remoteEnd: formData.remoteTbd ? '' : formData.remoteEnd, remoteDuration: formData.remoteDuration,
@@ -697,6 +701,32 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       <div style={SECTION}>
         <SectionHeader title="Solution Landscape" hint="What we'd position, what the customer runs today, and whether we're expanding, integrating, or displacing. Pick 'None / Greenfield' for net-new." />
         <SolutionLandscape rows={formData.landscape} solutions={solutions} onChange={rows => set('landscape', rows)} />
+      </div>
+
+      {/* Priority */}
+      <div style={SECTION}>
+        <SectionHeader title="Priority" hint="How soon does this need to happen? High or Critical requires a reason." />
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['Low', 'Medium', 'High', 'Critical'] as const).map(p => {
+            const active = formData.csePriority === p;
+            const c = ({ Low: '#107c10', Medium: '#8a6000', High: '#a4262c', Critical: '#7a0b12' } as Record<string, string>)[p];
+            return (
+              <button key={p} type="button" onClick={() => set('csePriority', p)}
+                style={{ padding: '5px 16px', fontSize: 12, fontWeight: 600, borderRadius: 4, cursor: 'pointer',
+                  border: `1px solid ${active ? c : '#ccc'}`, background: active ? c : '#fff', color: active ? '#fff' : '#605e5c' }}>
+                {p}
+              </button>
+            );
+          })}
+        </div>
+        {(formData.csePriority === 'High' || formData.csePriority === 'Critical') && (
+          <div style={{ marginTop: 10 }}>
+            <label style={LABEL_STYLE}>Why is this {formData.csePriority.toLowerCase()} priority? <span style={{ color: '#d13438' }}>*</span></label>
+            <textarea rows={2} value={formData.csePriorityReason} onChange={e => set('csePriorityReason', e.target.value)}
+              placeholder="What's driving the urgency? (deal timeline, exec ask, competitive pressure, event/EOL date…)"
+              style={{ ...INPUT, resize: 'vertical', borderColor: !formData.csePriorityReason.trim() ? '#d13438' : '#ccc', background: !formData.csePriorityReason.trim() ? '#fef6f6' : '#fff' }} />
+          </div>
+        )}
       </div>
 
       {/* Time Coordination */}
