@@ -73,7 +73,7 @@ const DEMO_SSE = 'Charlie Clemmer / charlie.clemmer@hpe.com';
 const DEMO_SCENARIOS: IDemoScenario[] = [
   {
     name: 'Cisco displacement',
-    customerName: 'Acme Corporation',
+    customerName: '[SAMPLE] Acme Corporation',
     engagementPurpose: 'EOL / Migration Planning',
     requestedSse: DEMO_SSE,
     notes: 'Cisco Catalyst estate hits end-of-support next fiscal year. Exec + network-architecture audience wants a migration roadmap to HPE Aruba CX plus a story for their Meraki wireless. Competitive displacement play — Cisco incumbent 8+ years.',
@@ -87,7 +87,7 @@ const DEMO_SCENARIOS: IDemoScenario[] = [
   },
   {
     name: 'Mist replaces Meraki (Cisco integrate)',
-    customerName: 'Globex Industries',
+    customerName: '[SAMPLE] Globex Industries',
     engagementPurpose: 'Architecture / Exec Conversation',
     requestedSse: DEMO_SSE,
     notes: 'Globex keeps its Cisco Catalyst 9300 switching core but wants a new Mist AI WLAN to replace its aging Cisco Meraki wireless. They already run HPE Aruba ClearPass for NAC — the engagement must prove ClearPass and the new Mist WLAN interoperate cleanly with the retained Catalyst switches. Technical + architecture audience; the ask is a credible interoperability + migration story before they commit.',
@@ -102,7 +102,7 @@ const DEMO_SCENARIOS: IDemoScenario[] = [
   },
   {
     name: 'Greenfield / net-new',
-    customerName: 'Initech LLC',
+    customerName: '[SAMPLE] Initech LLC',
     engagementPurpose: 'Pre-Sales Advisory',
     requestedSse: DEMO_SSE,
     notes: 'New logo, net-new build for a manufacturing site. No incumbent networking vendor for the OT / private-wireless layer. Early advisory to shape requirements around Private 5G before the RFP.',
