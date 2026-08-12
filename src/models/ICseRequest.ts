@@ -46,8 +46,9 @@ export interface ICseRequest {
   currentEnvironment?: string;    // JSON string of IEnvironmentRow[]
   hasDisplacement?: boolean;      // any competitor row present
   engagementOutcome?: string;     // ACTUAL result: 'Advisory Only' | 'Spawned New POC' | 'Modified Existing POC'
-  desiredOutcome?: string;        // GOAL(s), comma-joined selected outcomes (set at request time)
+  desiredOutcome?: string[];      // GOAL(s), multi-choice selected outcomes (set at request time)
   desiredOutcomeDetail?: string;  // objection list + any 'Other' free text
+  engagementPurposeOther?: string; // free text when EngagementPurpose = Other
 }
 
 export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: string }> = {

@@ -26,6 +26,7 @@ interface IStrategicFormData {
   primarySe: string;
   requestedSse: string;
   engagementPurpose: string;
+  engagementPurposeOther: string;
   landscape: IEnvironmentRow[];
   notes: string;
   desiredOutcomes: string[];
@@ -46,7 +47,7 @@ interface IStrategicFormData {
 
 const EMPTY_FORM: IStrategicFormData = {
   customerName: '', hpenBusinessUnit: '', buRegion: '', primarySe: '', requestedSse: '',
-  engagementPurpose: '', landscape: [], notes: '',
+  engagementPurpose: '', engagementPurposeOther: '', landscape: [], notes: '',
   desiredOutcomes: [], objectionText: '', outcomeOtherText: '',
   supportType: '', datesTbd: false,
   remoteStart: '', remoteEnd: '', remoteDuration: '',
@@ -54,7 +55,7 @@ const EMPTY_FORM: IStrategicFormData = {
   csePriority: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.3';
+const VERSION = '1.0.4';
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -342,6 +343,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
     if (!formData.buRegion)                   errs.push('Region is required.');
     if (!formData.primarySe.includes('/'))    errs.push('Primary SE is required.');
     if (!formData.engagementPurpose)          errs.push('Engagement Purpose is required.');
+    if (formData.engagementPurpose === 'Other' && !formData.engagementPurposeOther.trim())
+      errs.push('Describe the engagement (Engagement Purpose = Other).');
     if (!formData.requestedSse.includes('/')) errs.push('Requested SSE is required — search and select a person.');
     if (!formData.notes.trim())               errs.push('Description is required.');
     if (formData.landscape.some(r => isCompetitor(r.vendor) && !r.disposition))
@@ -391,10 +394,11 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         opportunity: '', notes: formData.notes, specialtyType: '',
         engagementType: 'Strategic Engagement',
         engagementPurpose: formData.engagementPurpose,
+        engagementPurposeOther: formData.engagementPurpose === 'Other' ? formData.engagementPurposeOther : '',
         currentEnvironment: JSON.stringify(rows),
         hasDisplacement: environmentHasDisplacement(rows),
         engagementOutcome: 'Advisory Only',
-        desiredOutcome: formData.desiredOutcomes.join(', '),
+        desiredOutcome: formData.desiredOutcomes,
         desiredOutcomeDetail: [
           formData.objectionText.trim() ? `Objection(s): ${formData.objectionText.trim()}` : '',
           formData.outcomeOtherText.trim() ? `Other: ${formData.outcomeOtherText.trim()}` : '',
@@ -500,6 +504,14 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
             <button key={p} type="button" onClick={() => set('engagementPurpose', p)} style={TOGGLE_BTN(formData.engagementPurpose === p)}>{p}</button>
           ))}
         </div>
+        {formData.engagementPurpose === 'Other' && (
+          <div style={{ marginTop: 10 }}>
+            <label style={LABEL_STYLE}>Describe the engagement <span style={{ color: '#d13438' }}>*</span></label>
+            <input type="text" value={formData.engagementPurposeOther} onChange={e => set('engagementPurposeOther', e.target.value)}
+              placeholder="What kind of engagement is this?"
+              style={{ ...INPUT, borderColor: !formData.engagementPurposeOther.trim() ? '#d13438' : '#ccc', background: !formData.engagementPurposeOther.trim() ? '#fef6f6' : '#fff' }} />
+          </div>
+        )}
       </div>
 
       {/* Description */}

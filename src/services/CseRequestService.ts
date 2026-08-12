@@ -15,7 +15,7 @@ const SP_SELECT = [
   'CustomerName', 'POCName', 'OpportunityAmount',
   'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'Modified', 'SpecialtyType',
   'EngagementType', 'EngagementPurpose', 'CurrentEnvironment', 'HasDisplacement', 'EngagementOutcome',
-  'DesiredOutcome', 'DesiredOutcomeDetail',
+  'DesiredOutcome', 'DesiredOutcomeDetail', 'EngagementPurposeOther',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,8 +73,9 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     currentEnvironment: item.CurrentEnvironment || '',
     hasDisplacement: !!item.HasDisplacement,
     engagementOutcome: unwrapChoice(item.EngagementOutcome),
-    desiredOutcome: item.DesiredOutcome || '',
+    desiredOutcome: Array.isArray(item.DesiredOutcome) ? item.DesiredOutcome : (item.DesiredOutcome?.results || []),
     desiredOutcomeDetail: item.DesiredOutcomeDetail || '',
+    engagementPurposeOther: item.EngagementPurposeOther || '',
   };
 }
 
@@ -121,8 +122,9 @@ export class CseRequestService {
       CurrentEnvironment: req.currentEnvironment || '',
       HasDisplacement: !!req.hasDisplacement,
       EngagementOutcome: req.engagementOutcome || '',
-      DesiredOutcome: req.desiredOutcome || '',
+      DesiredOutcome: { results: req.desiredOutcome || [] },
       DesiredOutcomeDetail: req.desiredOutcomeDetail || '',
+      EngagementPurposeOther: req.engagementPurposeOther || '',
     });
     return result.Id || result.id || 0;
   }
