@@ -78,6 +78,14 @@ const TD: React.CSSProperties = {
   padding: '7px 7px', verticalAlign: 'top',
 };
 
+// ── Header nav targets (same site collection) ─────────────────────────────────
+const POC_HOME_URL   = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/Home.aspx';
+const INSIGHTS_URL   = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SSE-Demand-Insights.aspx';
+// Front-door page ("Request SSE Support"); ?form=strategic opens straight to the Strategic Engagement form.
+const FRONT_DOOR_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/Strategic-Engagement-Request.aspx';
+const HDR_GREEN: React.CSSProperties = { padding: '5px 14px', background: HPE_GREEN, border: 'none', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' };
+const HDR_OUTLINE: React.CSSProperties = { padding: '5px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' };
+
 export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [requests, setRequests]     = useState<ICseRequest[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -877,32 +885,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — SSE Support Request Tracker</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
-          <a href="https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SSE-Request-Form.aspx"
-            target="_blank" rel="noreferrer"
-            style={{ padding: '4px 14px', background: HPE_GREEN, border: 'none', borderRadius: 4,
-              color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
-            + New Request
-          </a>
-          <a href="https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/Home.aspx"
-            target="_blank" rel="noreferrer"
-            style={{ padding: '4px 14px', background: 'rgba(255,255,255,0.12)',
-              border: '1px solid rgba(255,255,255,0.35)', borderRadius: 4,
-              color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}>
-            POC Manager
-          </a>
-          {isAdmin && (
-            <button
-              onClick={() => setShowAdmin(true)}
-              style={{
-                padding: '4px 14px', background: 'rgba(255,255,255,0.12)',
-                border: '1px solid rgba(255,255,255,0.35)', borderRadius: 4,
-                color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              }}>
-              Admin
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', marginRight: 4 }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
+          {/* Create actions (green) */}
+          <a href={`${FRONT_DOOR_URL}?form=strategic`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New SSE Request</a>
+          <a href={`${POC_HOME_URL}?new=1`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New POC</a>
+          <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.25)' }} />
+          {/* Navigation (outline) */}
+          <a href={POC_HOME_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>POC Manager</a>
+          <a href={INSIGHTS_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>📊 SSE Demand Insights</a>
+          {isAdmin && <button onClick={() => setShowAdmin(true)} style={HDR_OUTLINE}>Admin</button>}
           <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</span>
         </div>
       </div>

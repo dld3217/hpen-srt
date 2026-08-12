@@ -32,7 +32,12 @@ const CARDS: ICard[] = [
 ];
 
 export const SseFrontDoor: React.FC<ISseFrontDoorProps> = ({ sp, context }) => {
-  const [mode, setMode] = useState<'router' | 'strategic'>('router');
+  // Deep-link: ?form=strategic opens straight to the Strategic Engagement form
+  // (used by the SRT Dashboard "+ New SSE Request" button, skipping the 3-card picker).
+  const [mode, setMode] = useState<'router' | 'strategic'>(() => {
+    try { return new URLSearchParams(window.location.search).get('form') === 'strategic' ? 'strategic' : 'router'; }
+    catch { return 'router'; }
+  });
   const userDisplayName = context.pageContext.user.displayName || context.pageContext.user.email;
 
   if (mode === 'strategic') {
