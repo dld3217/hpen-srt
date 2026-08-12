@@ -13,7 +13,7 @@ export interface ISrtInsightsProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx';
 
 const parseEnv = (r: ICseRequest): IEnvironmentRow[] => {
@@ -54,6 +54,7 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<ICseRequest[]>([]);
   const [sseSort, setSseSort] = useState<{ field: 'name' | 'active' | 'strategic' | 'poc'; dir: 'asc' | 'desc' }>({ field: 'active', dir: 'desc' });
+  const [vendorSort, setVendorSort] = useState<{ field: 'vendor' | 'displace' | 'integrate'; dir: 'asc' | 'desc' }>({ field: 'displace', dir: 'desc' });
 
   useEffect(() => {
     new CseRequestService(sp).getAll()
@@ -80,7 +81,13 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   }));
   const vendorRows = Object.keys(vendorAgg)
     .map(v => ({ vendor: v, ...vendorAgg[v], areaList: Object.keys(vendorAgg[v].areas) }))
-    .sort((a, b) => (b.displace + b.integrate) - (a.displace + a.integrate));
+    .sort((a, b) => {
+      const cmp = vendorSort.field === 'vendor' ? a.vendor.localeCompare(b.vendor) : (a[vendorSort.field] as number) - (b[vendorSort.field] as number);
+      return vendorSort.dir === 'asc' ? cmp : -cmp;
+    });
+  const vendorSortClick = (field: 'vendor' | 'displace' | 'integrate'): void =>
+    setVendorSort(prev => prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: field === 'vendor' ? 'asc' : 'desc' });
+  const vendorIcon = (field: string): string => vendorSort.field !== field ? ' ⇅' : vendorSort.dir === 'asc' ? ' ▲' : ' ▼';
   const displaceTargets = vendorRows.reduce((s, v) => s + v.displace, 0);
 
   // SSE workload (active engagements per SSE)
@@ -172,7 +179,12 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
         <div style={SECTION_TITLE}>Competitive Pipeline — displace vs integrate by vendor</div>
         {vendorRows.length === 0 ? <div style={{ fontSize: 13, color: '#888' }}>No competitive landscape captured yet.</div> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={TH}>Incumbent Vendor</th><th style={{ ...TH, textAlign: 'right' }}>🎯 Displace</th><th style={{ ...TH, textAlign: 'right' }}>🤝 Integrate</th><th style={TH}>Solution Areas</th></tr></thead>
+            <thead><tr>
+              <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => vendorSortClick('vendor')}>Incumbent Vendor{vendorIcon('vendor')}</th>
+              <th style={{ ...TH, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => vendorSortClick('displace')}>🎯 Displace{vendorIcon('displace')}</th>
+              <th style={{ ...TH, textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => vendorSortClick('integrate')}>🤝 Integrate{vendorIcon('integrate')}</th>
+              <th style={TH}>Solution Areas</th>
+            </tr></thead>
             <tbody>
               {vendorRows.map(v => (
                 <tr key={v.vendor}>
