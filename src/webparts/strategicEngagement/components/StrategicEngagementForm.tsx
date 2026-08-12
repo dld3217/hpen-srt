@@ -58,11 +58,12 @@ const EMPTY_FORM: IStrategicFormData = {
   csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.7';
+const VERSION = '1.0.8';
 
 // Quick-pick duration presets per schedule format (SE can still type a custom value)
 const REMOTE_PRESETS = ['30-min call', '1-hour meeting', '2-hour session', 'Half day'];
 const ONSITE_PRESETS = ['Half day', 'Full day', '2 days', 'Multi-day'];
+const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx';
 
 // ── Demo data (admin-only quick-fill for live demos) ──────────────────────────
 // Each click of the header pill loads the next scenario. Edit any value below to
@@ -554,10 +555,16 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         <div style={{ fontSize: 14, color: '#605e5c', marginBottom: 24 }}>
           Your request for <strong>{formData.customerName}</strong> has been submitted and will route to the SSE for scheduling.
         </div>
-        <button onClick={() => { setFormData({ ...EMPTY_FORM, primarySe: `${userDisplayName} / ${userEmail}` }); setSubmitted(false); }}
-          style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-          Submit Another
-        </button>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => { setFormData({ ...EMPTY_FORM, primarySe: `${userDisplayName} / ${userEmail}` }); setSubmitted(false); }}
+            style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            Submit Another
+          </button>
+          <a href={SRT_DASHBOARD_URL}
+            style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, background: '#fff', color: HPE_NAVY, border: `1px solid ${HPE_NAVY}`, borderRadius: 4, cursor: 'pointer', textDecoration: 'none' }}>
+            Return to Dashboard
+          </a>
+        </div>
       </div>
     );
   }

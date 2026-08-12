@@ -13,7 +13,8 @@ export interface ISrtInsightsProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
+const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx';
 
 const parseEnv = (r: ICseRequest): IEnvironmentRow[] => {
   try { const a = JSON.parse(r.currentEnvironment || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -108,7 +109,14 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — SSE demand, capacity & competitive pipeline</div>
           </div>
         </div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href={SRT_DASHBOARD_URL}
+            style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)',
+              borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            ← SRT Dashboard
+          </a>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
+        </div>
       </div>
 
       {/* KPI tiles */}
