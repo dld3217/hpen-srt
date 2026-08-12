@@ -34,7 +34,8 @@ interface IStrategicFormData {
   objectionText: string;
   outcomeOtherText: string;
   supportType: 'Remote' | 'On-Site' | 'Both' | '';
-  datesTbd: boolean;
+  remoteTbd: boolean;
+  onsiteTbd: boolean;
   remoteStart: string;
   remoteEnd: string;
   remoteDuration: string;
@@ -50,13 +51,17 @@ const EMPTY_FORM: IStrategicFormData = {
   customerName: '', hpenBusinessUnit: '', buRegion: '', primarySe: '', requestedSse: '',
   engagementPurpose: '', engagementPurposeOther: '', landscape: [], notes: '',
   desiredOutcomes: [], objectionText: '', outcomeOtherText: '',
-  supportType: '', datesTbd: false,
-  remoteStart: '', remoteEnd: '', remoteDuration: '',
+  supportType: '', remoteTbd: false, onsiteTbd: false,
+  remoteStart: '', remoteEnd: '', remoteDuration: '1-hour meeting',
   onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
   csePriority: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.5';
+const VERSION = '1.0.6';
+
+// Quick-pick duration presets per schedule format (SE can still type a custom value)
+const REMOTE_PRESETS = ['30-min call', '1-hour meeting', '2-hour session', 'Half day'];
+const ONSITE_PRESETS = ['Half day', 'Full day', '2 days', 'Multi-day'];
 
 // ── Demo data (admin-only quick-fill for live demos) ──────────────────────────
 // Each click of the header pill loads the next scenario. Edit any value below to
@@ -220,26 +225,48 @@ const PeoplePickerField: React.FC<{
   );
 };
 
-// ── ScheduleBlock — date-only start/end + duration, optional location ──────────
+// ── ScheduleBlock — per-block TBD toggle, quick-pick duration, dates, location ──
 const ScheduleBlock: React.FC<{
   label: string; start: string; end: string; duration: string; location?: string;
-  onStart: (v: string) => void; onEnd: (v: string) => void; onDuration: (v: string) => void; onLocation?: (v: string) => void;
-}> = ({ label, start, end, duration, location, onStart, onEnd, onDuration, onLocation }) => (
+  tbd: boolean; presets: string[];
+  onStart: (v: string) => void; onEnd: (v: string) => void; onDuration: (v: string) => void;
+  onTbd: (v: boolean) => void; onLocation?: (v: string) => void;
+}> = ({ label, start, end, duration, location, tbd, presets, onStart, onEnd, onDuration, onTbd, onLocation }) => (
   <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
-    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{label}</div>
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-      <div>
-        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested Start</label>
-        <input type="date" value={start ? start.substring(0, 10) : ''} onChange={e => onStart(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-      </div>
-      <div>
-        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested End</label>
-        <input type="date" value={end ? end.substring(0, 10) : ''} onChange={e => onEnd(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer', color: '#605e5c', whiteSpace: 'nowrap' }}>
+        <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
+        Dates TBD / flexible
+      </label>
     </div>
+    {!tbd && (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div>
+          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested Start</label>
+          <input type="date" value={start ? start.substring(0, 10) : ''} onChange={e => onStart(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+        </div>
+        <div>
+          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested End</label>
+          <input type="date" value={end ? end.substring(0, 10) : ''} onChange={e => onEnd(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
+        </div>
+      </div>
+    )}
     <div style={{ marginBottom: onLocation ? 8 : 0 }}>
       <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
-      <input type="text" value={duration} onChange={e => onDuration(e.target.value)} placeholder="e.g. 90-min briefing, half day" style={INPUT} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+        {presets.map(p => {
+          const active = duration === p;
+          return (
+            <button key={p} type="button" onClick={() => onDuration(active ? '' : p)}
+              style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, cursor: 'pointer',
+                border: `1px solid ${active ? HPE_NAVY : '#ccc'}`, background: active ? HPE_NAVY : '#fff', color: active ? '#fff' : '#605e5c' }}>
+              {p}
+            </button>
+          );
+        })}
+      </div>
+      <input type="text" value={duration} onChange={e => onDuration(e.target.value)} placeholder="…or type a custom duration" style={INPUT} />
     </div>
     {onLocation && (
       <div>
@@ -404,7 +431,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       desiredOutcomes: s.desiredOutcomes,
       landscape,
       supportType: s.supportType,
-      datesTbd: !!s.datesTbd,
+      remoteTbd: !!s.datesTbd,
+      onsiteTbd: !!s.datesTbd,
       remoteDuration: s.remoteDuration || '',
       onsiteDuration: s.onsiteDuration || '',
       location: s.location || '',
@@ -461,7 +489,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       const sedEmail   = buConfig?.sedEmail || '';
       const rows       = formData.landscape.filter(r => r.solutionCode || r.vendor || r.product || r.version);
       const focusCodes = Array.from(new Set(rows.map(r => r.solutionCode).filter(Boolean)));
-      const schedStatus = formData.datesTbd ? 'TBD' as const : 'Dates Proposed' as const;
+      const wantRemote = formData.supportType === 'Remote' || formData.supportType === 'Both';
+      const wantOnsite = formData.supportType === 'On-Site' || formData.supportType === 'Both';
+      const hasFirmDates = (wantRemote && !formData.remoteTbd) || (wantOnsite && !formData.onsiteTbd);
+      const schedStatus = hasFirmDates ? 'Dates Proposed' as const : 'TBD' as const;
 
       const svc = new CseRequestService(sp);
       await svc.create({
@@ -477,8 +508,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         csePriorityReason: '',
         solutionsFocus: focusCodes.join(','),
         supportType: formData.supportType,
-        remoteTbd: formData.datesTbd, remoteStart: formData.remoteStart, remoteEnd: formData.remoteEnd, remoteDuration: formData.remoteDuration,
-        onsiteTbd: formData.datesTbd, onsiteStart: formData.onsiteStart, onsiteEnd: formData.onsiteEnd, onsiteDuration: formData.onsiteDuration, onsiteDestination: formData.location,
+        remoteTbd: formData.remoteTbd, remoteStart: formData.remoteTbd ? '' : formData.remoteStart, remoteEnd: formData.remoteTbd ? '' : formData.remoteEnd, remoteDuration: formData.remoteDuration,
+        onsiteTbd: formData.onsiteTbd, onsiteStart: formData.onsiteTbd ? '' : formData.onsiteStart, onsiteEnd: formData.onsiteTbd ? '' : formData.onsiteEnd, onsiteDuration: formData.onsiteDuration, onsiteDestination: formData.location,
         sePrimary: formData.primarySe,
         semPrimary: semEmail, sedEmail,
         buRegion: formData.buRegion, hpenBusinessUnit: formData.hpenBusinessUnit,
@@ -679,19 +710,17 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
             ))}
           </div>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#323130', marginBottom: 10 }}>
-          <input type="checkbox" checked={formData.datesTbd} onChange={e => set('datesTbd', e.target.checked)} style={{ accentColor: HPE_NAVY }} />
-          Dates TBD / Flexible — SSE proposes times back
-        </label>
-        {!formData.datesTbd && showRemote && (
+        {showRemote && (
           <ScheduleBlock label="Remote Schedule" start={formData.remoteStart} end={formData.remoteEnd} duration={formData.remoteDuration}
-            onStart={v => set('remoteStart', v)} onEnd={v => set('remoteEnd', v)} onDuration={v => set('remoteDuration', v)} />
+            tbd={formData.remoteTbd} presets={REMOTE_PRESETS}
+            onStart={v => set('remoteStart', v)} onEnd={v => set('remoteEnd', v)} onDuration={v => set('remoteDuration', v)} onTbd={v => set('remoteTbd', v)} />
         )}
-        {!formData.datesTbd && showOnsite && (
+        {showOnsite && (
           <ScheduleBlock label="On-Site Schedule" start={formData.onsiteStart} end={formData.onsiteEnd} duration={formData.onsiteDuration} location={formData.location}
-            onStart={v => set('onsiteStart', v)} onEnd={v => set('onsiteEnd', v)} onDuration={v => set('onsiteDuration', v)} onLocation={v => set('location', v)} />
+            tbd={formData.onsiteTbd} presets={ONSITE_PRESETS}
+            onStart={v => set('onsiteStart', v)} onEnd={v => set('onsiteEnd', v)} onDuration={v => set('onsiteDuration', v)} onTbd={v => set('onsiteTbd', v)} onLocation={v => set('location', v)} />
         )}
-        {!formData.supportType && <div style={{ fontSize: 12, color: '#888' }}>Pick a format above to set requested dates.</div>}
+        {!formData.supportType && <div style={{ fontSize: 12, color: '#888' }}>Pick a format above to set the schedule.</div>}
       </div>
 
       {/* Submit */}

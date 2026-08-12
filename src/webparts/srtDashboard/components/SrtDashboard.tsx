@@ -107,13 +107,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterBU, setFilterBU]                 = useState('All');
   const [filterRegion, setFilterRegion]         = useState('All');
   const [filterPriority, setFilterPriority]     = useState('All');
+  const [filterType, setFilterType]             = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
   const [showPendingSection, setShowPendingSection]     = useState(true);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
   const [activeTile, setActiveTile]             = useState<string | null>(null);
-  const [sortField, setSortField]               = useState<'customer' | 'priority' | 'status'>('customer');
+  const [sortField, setSortField]               = useState<'customer' | 'priority' | 'status' | 'type'>('customer');
   const [sortDir, setSortDir]                   = useState<'asc' | 'desc'>('asc');
   const [drawerOpportunity, setDrawerOpportunity] = useState('');
   const [drawerNotes, setDrawerNotes]             = useState('');
@@ -408,6 +409,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
   const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete');
 
+  const isStrategicReq = (r: ICseRequest): boolean => r.engagementType === 'Strategic Engagement';
+  const reqType = (r: ICseRequest): string => isStrategicReq(r) ? 'Strategic' : 'POC';
+
   const filteredRequests = tileFiltered.filter(r => {
     if (!activeTile && r.requestStatus === 'Pending') return false;
     if (!activeTile && r.requestStatus === 'Complete') return false;
@@ -415,6 +419,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
     if (filterPriority !== 'All' && r.csePriority !== filterPriority) return false;
+    if (filterType !== 'All' && reqType(r) !== filterType) return false;
     if (filterSearch && !r.customerName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
     return true;
   }).sort((a, b) => {
@@ -424,6 +429,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (sortField === 'customer') cmp = a.customerName.localeCompare(b.customerName);
     else if (sortField === 'priority') cmp = (PRIORITY_ORDER[a.csePriority] ?? 99) - (PRIORITY_ORDER[b.csePriority] ?? 99);
     else if (sortField === 'status') cmp = (STATUS_ORDER[a.requestStatus] ?? 99) - (STATUS_ORDER[b.requestStatus] ?? 99);
+    else if (sortField === 'type') cmp = (isStrategicReq(a) ? 0 : 1) - (isStrategicReq(b) ? 0 : 1);
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -444,7 +450,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
     const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
-    const colSpan       = 11 + (isSED ? 1 : 0) + (isAdmin ? 1 : 0);
+    const colSpan       = 12 + (isSED ? 1 : 0) + (isAdmin ? 1 : 0);
+    const isStrat       = isStrategicReq(req);
+    const purposeText   = req.engagementPurpose === 'Other' ? (req.engagementPurposeOther || 'Other') : (req.engagementPurpose || '');
+    const durationText  = req.remoteDuration || req.onsiteDuration || '';
     const rowBg         = selectedIds.has(req.id!) ? '#ffe9e9' : isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
     return (
       <React.Fragment key={req.id ?? i}>
@@ -460,6 +469,17 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               })} />
           </td>
         )}
+        <td style={{ ...TD, opacity: isCancelled ? 0.6 : 1 }}>
+          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+            background: isStrat ? '#e8f5e9' : '#ebf3fc', color: isStrat ? '#1a6b2e' : HPE_NAVY }}>
+            {isStrat ? '🎯 Strategic' : '🔬 POC'}
+          </span>
+          {isStrat && (purposeText || durationText) && (
+            <div style={{ fontSize: 10, color: '#888', marginTop: 3, maxWidth: 150 }}>
+              {purposeText}{purposeText && durationText ? ' · ' : ''}{durationText}
+            </div>
+          )}
+        </td>
         <td style={{ ...TD, opacity: isCancelled ? 0.6 : 1 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <span style={{ fontSize: 10, color: '#6b2faf', marginTop: 3, flexShrink: 0 }}>{isExpanded ? '▾' : '▸'}</span>
@@ -999,8 +1019,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <option value="All">All Priority</option>
             {['Low','Medium','High','Critical'].map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {(activeTile || filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterSearch) && (
-            <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterSearch(''); }}
+          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+            <option value="All">All Types</option>
+            <option value="Strategic">🎯 Strategic</option>
+            <option value="POC">🔬 POC</option>
+          </select>
+          {(activeTile || filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterType !== 'All' || filterSearch) && (
+            <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterType('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
             </button>
@@ -1023,14 +1049,15 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               <thead>
                 <tr style={{ background: HPE_NAVY, color: '#fff' }}>
                   {(() => {
-                    const sortIcon = (field: 'customer' | 'priority' | 'status'): string =>
+                    const sortIcon = (field: 'customer' | 'priority' | 'status' | 'type'): string =>
                       sortField !== field ? ' ⇅' : sortDir === 'asc' ? ' ▲' : ' ▼';
-                    const handleSort = (field: 'customer' | 'priority' | 'status'): void => {
+                    const handleSort = (field: 'customer' | 'priority' | 'status' | 'type'): void => {
                       if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
                       else { setSortField(field); setSortDir('asc'); }
                     };
                     return (<>
                   {isAdmin && <th style={{ ...TH, width: 28, padding: '4px 6px' }} />}
+                  <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('type')}>Type{sortIcon('type')}</th>
                   <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('customer')}>Customer{sortIcon('customer')}</th>
                   <th style={TH}>SE</th>
                   <th style={TH}>SSE / SED</th>
@@ -1051,7 +1078,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {/* ── Awaiting Acceptance ── */}
                 {!activeTile && pendingRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowPendingSection(s => !s)}>
-                    <td colSpan={isAdmin ? 12 : 11} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
+                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
                       ⏳ Awaiting Acceptance ({pendingRows.length}) {showPendingSection ? '▾' : '▸'}
                     </td>
                   </tr>
@@ -1061,7 +1088,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {/* ── Active Engagements ── */}
                 {!activeTile && (
                   <tr>
-                    <td colSpan={isAdmin ? 12 : 11} style={{ padding: '6px 12px', background: '#ebf3fc', fontWeight: 700, color: HPE_NAVY, fontSize: 12 }}>
+                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#ebf3fc', fontWeight: 700, color: HPE_NAVY, fontSize: 12 }}>
                       Active Engagements ({filteredRequests.length})
                     </td>
                   </tr>
@@ -1071,7 +1098,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {/* ── Completed & Awaiting Sign-off ── */}
                 {!activeTile && completedRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowCompletedSection(s => !s)}>
-                    <td colSpan={isAdmin ? 12 : 11} style={{ padding: '6px 12px', background: '#e8f5e9', fontWeight: 700, color: '#1a6b2e', fontSize: 12, userSelect: 'none' as const }}>
+                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#e8f5e9', fontWeight: 700, color: '#1a6b2e', fontSize: 12, userSelect: 'none' as const }}>
                       ✓ Completed &amp; Awaiting Sign-off ({completedRows.length}){completedRows.filter(r => !r.signedOffBy).length > 0 ? ` · ${completedRows.filter(r => !r.signedOffBy).length} need sign-off` : ''} {showCompletedSection ? '▾' : '▸'}
                     </td>
                   </tr>
