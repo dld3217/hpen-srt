@@ -56,7 +56,62 @@ const EMPTY_FORM: IStrategicFormData = {
   csePriority: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.4';
+const VERSION = '1.0.5';
+
+// ── Demo data (admin-only quick-fill for live demos) ──────────────────────────
+// Each click of the header pill loads the next scenario. Edit any value below to
+// change what loads; BU/Region + solution names resolve from live config at fill time.
+interface IDemoRow { code: string; vendor: string; disposition: string; product: string; version: string; detail: string; }
+interface IDemoScenario {
+  name: string; customerName: string; engagementPurpose: string;
+  requestedSse: string; notes: string; desiredOutcomes: string[];
+  supportType: 'Remote' | 'On-Site' | 'Both'; datesTbd?: boolean; location?: string;
+  remoteDuration?: string; onsiteDuration?: string; csePriority: string; opportunityAmount: number;
+  rows: IDemoRow[];
+}
+const DEMO_SSE = 'Charlie Clemmer / charlie.clemmer@hpe.com';
+const DEMO_SCENARIOS: IDemoScenario[] = [
+  {
+    name: 'Cisco displacement',
+    customerName: 'Acme Corporation',
+    engagementPurpose: 'EOL / Migration Planning',
+    requestedSse: DEMO_SSE,
+    notes: 'Cisco Catalyst estate hits end-of-support next fiscal year. Exec + network-architecture audience wants a migration roadmap to HPE Aruba CX plus a story for their Meraki wireless. Competitive displacement play — Cisco incumbent 8+ years.',
+    desiredOutcomes: ['Displace the incumbent', 'Prove the proposed solution'],
+    supportType: 'On-Site', location: 'Denver, CO', onsiteDuration: 'Full-day workshop',
+    csePriority: 'High', opportunityAmount: 850000,
+    rows: [
+      { code: 'HCXS', vendor: 'Cisco', disposition: 'Displace', product: 'Catalyst 9300', version: '17.9', detail: 'Catalyst 9300 fabric EOL FY27; migrate access + core to CX 8100/8360 over 3 phases.' },
+      { code: 'HWRL', vendor: 'Cisco Meraki', disposition: 'Displace', product: 'MR46', version: '', detail: 'Meraki wireless up for renewal; position AOS10 to consolidate licensing.' },
+    ],
+  },
+  {
+    name: 'Juniper/Mist expansion',
+    customerName: 'Globex Industries',
+    engagementPurpose: 'Roadmap / Product Direction',
+    requestedSse: DEMO_SSE,
+    notes: 'Existing Mist wireless customer evaluating where the AI-driven roadmap goes next — wired assurance and NAC. Trusted-advisor conversation to deepen the footprint and pre-empt a competitive look.',
+    desiredOutcomes: ['Establish trusted-advisor relationship', "Shape the requirements / get spec'd in"],
+    supportType: 'Remote', remoteDuration: '90-min briefing',
+    csePriority: 'Medium', opportunityAmount: 300000,
+    rows: [
+      { code: 'MWRL', vendor: 'Juniper (HPE)', disposition: 'Expansion', product: 'AP45', version: '', detail: '' },
+    ],
+  },
+  {
+    name: 'Greenfield / net-new',
+    customerName: 'Initech LLC',
+    engagementPurpose: 'Pre-Sales Advisory',
+    requestedSse: DEMO_SSE,
+    notes: 'New logo, net-new build for a manufacturing site. No incumbent networking vendor for the OT / private-wireless layer. Early advisory to shape requirements around Private 5G before the RFP.',
+    desiredOutcomes: ["Shape the requirements / get spec'd in", 'Prove the proposed solution'],
+    supportType: 'Both', datesTbd: true,
+    csePriority: 'Medium', opportunityAmount: 500000,
+    rows: [
+      { code: 'PW5G', vendor: 'None / Greenfield', disposition: 'New', product: '', version: '', detail: '' },
+    ],
+  },
+];
 
 const greeting = (): string => {
   const h = new Date().getHours();
@@ -295,15 +350,17 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   const [submitted, setSubmitted]     = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin]         = useState(false);
+  const [demoIdx, setDemoIdx]         = useState(0);
 
   const userEmail       = context.pageContext.user.email;
   const userDisplayName = context.pageContext.user.displayName || userEmail;
 
   useEffect(() => {
     const configSvc = new ConfigService(sp);
-    Promise.all([configSvc.getBURegions(), configSvc.getSolutions()])
-      .then(([bur, sols]) => {
-        setBuRegions(bur); setSolutions(sols);
+    Promise.all([configSvc.getBURegions(), configSvc.getSolutions(), configSvc.isSuperUser(userEmail)])
+      .then(([bur, sols, admin]) => {
+        setBuRegions(bur); setSolutions(sols); setIsAdmin(admin);
         const savedBU = localStorage.getItem('srt_bu') || '';
         const savedRegion = localStorage.getItem('srt_region') || '';
         const buOk = !!(savedBU && bur[savedBU]);
@@ -321,6 +378,40 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
 
   const set = (field: keyof IStrategicFormData, value: IStrategicFormData[keyof IStrategicFormData]): void =>
     setFormData(prev => ({ ...prev, [field]: value }));
+
+  const loadDemo = (): void => {
+    const s = DEMO_SCENARIOS[demoIdx % DEMO_SCENARIOS.length];
+    // Resolve a valid BU + Region from live config (keep current selection if still valid)
+    const buKey = (formData.hpenBusinessUnit && buRegions[formData.hpenBusinessUnit])
+      ? formData.hpenBusinessUnit : (Object.keys(buRegions).sort()[0] || '');
+    const regionsForBu = buKey ? Object.keys((buRegions[buKey] as IBUConfig)?.regions || {}).sort() : [];
+    const regionKey = (formData.buRegion && regionsForBu.indexOf(formData.buRegion) !== -1)
+      ? formData.buRegion : (regionsForBu[0] || '');
+    const landscape: IEnvironmentRow[] = s.rows.map(r => {
+      const sol = solutions.filter(x => x.code === r.code)[0];
+      return { solutionCode: r.code, solution: sol ? sol.name : '', vendor: r.vendor, product: r.product, version: r.version, disposition: r.disposition, detail: r.detail };
+    });
+    setFormData({
+      ...EMPTY_FORM,
+      primarySe: `${userDisplayName} / ${userEmail}`,
+      hpenBusinessUnit: buKey, buRegion: regionKey,
+      customerName: s.customerName,
+      engagementPurpose: s.engagementPurpose,
+      requestedSse: s.requestedSse,
+      notes: s.notes,
+      desiredOutcomes: s.desiredOutcomes,
+      landscape,
+      supportType: s.supportType,
+      datesTbd: !!s.datesTbd,
+      remoteDuration: s.remoteDuration || '',
+      onsiteDuration: s.onsiteDuration || '',
+      location: s.location || '',
+      csePriority: s.csePriority,
+      opportunityAmount: s.opportunityAmount,
+    });
+    setValidationErrors([]); setSubmitError('');
+    setDemoIdx(demoIdx + 1);
+  };
 
   const handleSearchUsers = async (query: string): Promise<IGraphUser[]> => {
     try {
@@ -449,9 +540,18 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — SSE time outside an active POC</div>
           </div>
         </div>
-        <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{greeting()}, {firstName(userDisplayName)}</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, whiteSpace: 'nowrap' }}>
+          {isAdmin && (
+            <button type="button" onClick={loadDemo}
+              title={`Fill with demo data — next: ${DEMO_SCENARIOS[demoIdx % DEMO_SCENARIOS.length].name} (admins only)`}
+              style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 12, padding: '4px 11px', cursor: 'pointer' }}>
+              🧪 Demo {(demoIdx % DEMO_SCENARIOS.length) + 1}/{DEMO_SCENARIOS.length}
+            </button>
+          )}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{greeting()}, {firstName(userDisplayName)}</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</div>
+          </div>
         </div>
       </div>
 
