@@ -34,10 +34,11 @@ const SECTION_TITLE: React.CSSProperties = { fontSize: 12, fontWeight: 700, colo
 const TH: React.CSSProperties = { textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.4px', padding: '6px 10px', borderBottom: '1px solid #eee' };
 const TD: React.CSSProperties = { fontSize: 13, padding: '7px 10px', borderBottom: '1px solid #f3f3f3' };
 
-const Tile: React.FC<{ label: string; value: number | string; color?: string }> = ({ label, value, color }) => (
-  <div style={{ flex: '1 1 130px', background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '14px 10px', textAlign: 'center' }}>
-    <div style={{ fontSize: 26, fontWeight: 700, color: color || HPE_NAVY }}>{value}</div>
-    <div style={{ fontSize: 11, color: '#605e5c', marginTop: 2 }}>{label}</div>
+const Tile: React.FC<{ label: string; value: number | string; color?: string; active?: boolean; onClick?: () => void }> = ({ label, value, color, active, onClick }) => (
+  <div onClick={onClick} style={{ flex: '1 1 120px', background: active ? '#eef3fb' : '#fff', border: `1px solid ${active ? HPE_NAVY : '#e0e0e0'}`, borderRadius: 8, padding: '12px 10px', textAlign: 'center', cursor: onClick ? 'pointer' : 'default' }}>
+    <div style={{ fontSize: 24, fontWeight: 700, color: color || HPE_NAVY }}>{value}</div>
+    <div style={{ fontSize: 10.5, color: '#605e5c', marginTop: 2 }}>{label}</div>
+    {onClick && <div style={{ fontSize: 9, color: active ? HPE_NAVY : '#bbb', marginTop: 3, fontWeight: 600 }}>{active ? '▲ hide' : '▾ details'}</div>}
   </div>
 );
 
@@ -56,6 +57,7 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   const [requests, setRequests] = useState<ICseRequest[]>([]);
   const [sseSort, setSseSort] = useState<{ field: 'name' | 'active' | 'strategic' | 'poc'; dir: 'asc' | 'desc' }>({ field: 'active', dir: 'desc' });
   const [vendorSort, setVendorSort] = useState<{ field: 'vendor' | 'displace' | 'integrate'; dir: 'asc' | 'desc' }>({ field: 'displace', dir: 'desc' });
+  const [drill, setDrill] = useState<string | null>(null);
 
   useEffect(() => {
     new CseRequestService(sp).getAll()
@@ -113,6 +115,29 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   const outcomeRows = Object.keys(outcomeAgg).map(o => ({ outcome: o, count: outcomeAgg[o] })).sort((a, b) => b.count - a.count);
   const outcomeMax = outcomeRows.reduce((m, o) => Math.max(m, o.count), 0);
 
+  // Drill-down detail (surfaces the customer/outcome context captured on the form)
+  interface IDisplaceItem { customer: string; vendor: string; product: string; solution: string; outcomes: string; }
+  const displaceItems: IDisplaceItem[] = [];
+  requests.forEach(r => parseEnv(r).forEach(row => {
+    if (row.disposition === 'Displace' && row.vendor) {
+      displaceItems.push({ customer: r.customerName, vendor: row.vendor, product: row.product || '—', solution: row.solution || '—', outcomes: (r.desiredOutcome || []).join(', ') || '—' });
+    }
+  }));
+  const engDisplaceCount = requests.filter(r => parseEnv(r).some(row => row.disposition === 'Displace' && row.vendor)).length;
+  const drillRequests = (key: string): ICseRequest[] => {
+    if (key === 'total') return requests;
+    if (key === 'poc') return requests.filter(r => !isStrategic(r));
+    if (key === 'strategic') return strategic;
+    if (key === 'active') return requests.filter(isActive);
+    if (key === 'engDisplace') return requests.filter(r => parseEnv(r).some(row => row.disposition === 'Displace' && row.vendor));
+    return [];
+  };
+  const DRILL_TITLES: Record<string, string> = {
+    total: 'All Requests', poc: 'POC Support', strategic: 'Strategic Engagements',
+    active: 'Active Engagements', displaceTargets: 'Displacement Targets — line items', engDisplace: 'Engagements with a Displacement',
+  };
+  const toggleDrill = (key: string): void => setDrill(prev => prev === key ? null : key);
+
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
       {/* Header */}
@@ -134,14 +159,60 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
         </div>
       </div>
 
-      {/* KPI tiles */}
+      {/* KPI tiles — click any tile to drill into the underlying records */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <Tile label="Total Requests" value={total} />
-        <Tile label="POC Support" value={pocCount} color="#0078d4" />
-        <Tile label="Strategic Engagements" value={strategicCount} color={HPE_GREEN} />
-        <Tile label="Active" value={activeCount} color="#8a6000" />
-        <Tile label="Displacement Targets" value={displaceTargets} color="#a4262c" />
+        <Tile label="Total Requests" value={total} active={drill === 'total'} onClick={() => toggleDrill('total')} />
+        <Tile label="POC Support" value={pocCount} color="#0078d4" active={drill === 'poc'} onClick={() => toggleDrill('poc')} />
+        <Tile label="Strategic Engagements" value={strategicCount} color={HPE_GREEN} active={drill === 'strategic'} onClick={() => toggleDrill('strategic')} />
+        <Tile label="Active" value={activeCount} color="#8a6000" active={drill === 'active'} onClick={() => toggleDrill('active')} />
+        <Tile label="Displacement Targets" value={displaceTargets} color="#a4262c" active={drill === 'displaceTargets'} onClick={() => toggleDrill('displaceTargets')} />
+        <Tile label="Engagements w/ Displacement" value={engDisplaceCount} color="#a4262c" active={drill === 'engDisplace'} onClick={() => toggleDrill('engDisplace')} />
       </div>
+
+      {/* Drill-down detail panel */}
+      {drill && (
+        <div style={{ ...CARD, border: `1px solid ${HPE_NAVY}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{DRILL_TITLES[drill]}</div>
+            <button type="button" onClick={() => setDrill(null)} style={{ fontSize: 11, fontWeight: 600, color: '#605e5c', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, padding: '3px 10px', cursor: 'pointer' }}>✕ close</button>
+          </div>
+          {drill === 'displaceTargets' ? (
+            displaceItems.length === 0 ? <div style={{ fontSize: 13, color: '#888' }}>No displacements captured.</div> : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={TH}>Customer</th><th style={TH}>Incumbent</th><th style={TH}>Product</th><th style={TH}>We Position</th><th style={TH}>Desired Outcome(s)</th></tr></thead>
+                <tbody>
+                  {displaceItems.map((d, i) => (
+                    <tr key={i}>
+                      <td style={{ ...TD, fontWeight: 600 }}>{d.customer}</td>
+                      <td style={{ ...TD, color: '#a4262c' }}>{d.vendor}</td>
+                      <td style={TD}>{d.product}</td>
+                      <td style={{ ...TD, color: HPE_GREEN }}>{d.solution}</td>
+                      <td style={{ ...TD, fontSize: 12, color: '#605e5c' }}>{d.outcomes}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : (
+            drillRequests(drill).length === 0 ? <div style={{ fontSize: 13, color: '#888' }}>None.</div> : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={TH}>Customer</th><th style={TH}>Type</th><th style={TH}>Status</th><th style={TH}>Purpose</th><th style={TH}>Desired Outcome(s)</th></tr></thead>
+                <tbody>
+                  {drillRequests(drill).map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ ...TD, fontWeight: 600 }}>{r.customerName || '—'}</td>
+                      <td style={{ ...TD, fontSize: 12 }}>{isStrategic(r) ? '🎯 Strategic' : '🔬 POC'}</td>
+                      <td style={{ ...TD, fontSize: 12 }}>{r.requestStatus}</td>
+                      <td style={{ ...TD, fontSize: 12, color: '#605e5c' }}>{isStrategic(r) ? (r.engagementPurpose || '—') : '—'}</td>
+                      <td style={{ ...TD, fontSize: 12, color: '#605e5c' }}>{(r.desiredOutcome || []).join(', ') || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+        </div>
+      )}
 
       {/* Demand split */}
       <div style={CARD}>
