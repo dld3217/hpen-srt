@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
+import { APP_VERSION } from '../../../appVersion';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
@@ -13,7 +14,7 @@ export interface ISrtInsightsProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.3';
+const VERSION = APP_VERSION;
 const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx';
 
 const parseEnv = (r: ICseRequest): IEnvironmentRow[] => {

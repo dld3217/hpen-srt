@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { APP_VERSION } from '../../../appVersion';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
@@ -68,7 +69,7 @@ export interface ISrtDashboardProps {
   context: WebPartContext;
 }
 
-const VERSION = '1.0.70';
+const VERSION = APP_VERSION;
 
 const TH: React.CSSProperties = {
   padding: '7px 7px', textAlign: 'left', fontSize: 11, fontWeight: 700,

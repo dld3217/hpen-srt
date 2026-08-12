@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { APP_VERSION } from '../../../appVersion';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { MSGraphClientV3 } from '@microsoft/sp-http';
@@ -58,7 +59,7 @@ const EMPTY_FORM: IStrategicFormData = {
   csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0,
 };
 
-const VERSION = '1.0.8';
+const VERSION = APP_VERSION;
 
 // Quick-pick duration presets per schedule format (SE can still type a custom value)
 const REMOTE_PRESETS = ['30-min call', '1-hour meeting', '2-hour session', 'Half day'];
