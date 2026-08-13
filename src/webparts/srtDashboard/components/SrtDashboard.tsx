@@ -600,6 +600,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{req.scheduleStatus}</span>
           {!req.remoteTbd && req.remoteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}</div>}
           {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
+          {showDateActions && <div style={{ display: 'inline-block', marginTop: 4, fontSize: 10, fontWeight: 700, color: '#8a6000', background: '#fff4ce', border: '1px solid #d9a300', borderRadius: 8, padding: '1px 7px' }}>⏳ Confirm dates</div>}
         </td>
         <td style={TD} onClick={e => e.stopPropagation()}>
           {isAdmin ? (
@@ -716,6 +717,33 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {isExpanded && dateEdit && (
         <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
           <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+            {/* ── SSE pending action, surfaced at the very top ── */}
+            {showDateActions && (
+              <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff4ce', border: '1px solid #d9a300', borderRadius: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#8a6000', marginBottom: 10 }}>⏳ Awaiting your date confirmation</div>
+                {declineDatesId === req.id ? (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input type="text" value={declineDatesNote} onChange={e => setDeclineDatesNote(e.target.value)}
+                      placeholder="Reason dates don't work (optional)"
+                      style={{ flex: 1, minWidth: 220, fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
+                    <button disabled={savingDates} onClick={() => handleDeclineDatesConfirm(req.id!).catch(() => undefined)}
+                      style={{ padding: '6px 16px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {savingDates ? '…' : 'Confirm Decline'}
+                    </button>
+                    <button onClick={() => { setDeclineDatesId(null); setDeclineDatesNote(''); }}
+                      style={{ padding: '6px 14px', background: '#fff', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
+                      style={{ padding: '7px 20px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✓ Confirm Dates</button>
+                    <button onClick={() => setDeclineDatesId(req.id!)}
+                      style={{ padding: '7px 16px', background: '#fff', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✕ Dates Don&apos;t Work</button>
+                    <span style={{ fontSize: 11, color: '#8a6000' }}>Review the proposed dates below, then confirm or send back.</span>
+                  </div>
+                )}
+              </div>
+            )}
             {/* ── Strategic Engagement review (competitive intel for the SSE) ── */}
             {isStrat && (
               <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #e0d8f0' }}>
@@ -872,28 +900,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   style={{ padding: '6px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingDates ? 0.6 : 1 }}>
                   {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save (will flag as Rescheduling)' : 'Save Dates'}
                 </button>
-              )}
-              {showDateActions && !canEditDates === false && (
-                declineDatesId === req.id ? (
-                  <>
-                    <input type="text" value={declineDatesNote} onChange={e => setDeclineDatesNote(e.target.value)}
-                      placeholder="Reason dates don't work (optional)"
-                      style={{ flex: 1, minWidth: 200, fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
-                    <button disabled={savingDates} onClick={() => handleDeclineDatesConfirm(req.id!).catch(() => undefined)}
-                      style={{ padding: '5px 14px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      {savingDates ? '…' : 'Confirm Decline'}
-                    </button>
-                    <button onClick={() => { setDeclineDatesId(null); setDeclineDatesNote(''); }}
-                      style={{ padding: '5px 14px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
-                      style={{ padding: '6px 18px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓ Confirm Dates</button>
-                    <button onClick={() => setDeclineDatesId(req.id!)}
-                      style={{ padding: '6px 14px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✕ Dates Don&apos;t Work</button>
-                  </>
-                )
               )}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                 {canCancel(req) && cancelId !== req.id && (
