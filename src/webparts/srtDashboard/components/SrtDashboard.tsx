@@ -125,6 +125,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterPriority, setFilterPriority]     = useState('All');
   const [filterType, setFilterType]             = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
+  const [viewMode, setViewMode]                 = useState<'mine' | 'all'>('mine');
   const [showPendingSection, setShowPendingSection]     = useState(true);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
@@ -149,7 +150,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const svc       = new CseRequestService(sp);
     const configSvc = new ConfigService(sp);
     Promise.all([svc.getAll(), configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail)])
-      .then(([all, admin, sed]) => { setRequests(all); setIsAdmin(admin); setIsSED(sed); setLoading(false); })
+      .then(([all, admin, sed]) => {
+        setRequests(all); setIsAdmin(admin); setIsSED(sed);
+        // Context default: SEDs/admins land on the full queue, everyone else on what's relevant to them.
+        setViewMode(admin || sed ? 'all' : 'mine');
+        setLoading(false);
+      })
       .catch(err => { setError(String(err)); setLoading(false); });
   }, []);
 
@@ -402,12 +408,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     </div>
   );
 
-  const visibleRequests = isAdmin
-    ? requests
-    : requests.filter(r =>
-        r.sePrimary.toLowerCase().includes(userEmail) &&
-        r.requestStatus !== 'Cancelled'
-      );
+  // SEE vs DO: everyone can see the board (read-only); actions stay role-gated elsewhere.
+  // 'mine' = requests I submitted (SEPrimary) OR am assigned to (RequestedCSE); 'all' = full board.
+  const relevantToMe = (r: ICseRequest): boolean =>
+    r.sePrimary.toLowerCase().includes(userEmail) || (r.requestedCse || '').toLowerCase().includes(userEmail);
+  const notHidden = (r: ICseRequest): boolean => isAdmin || r.requestStatus !== 'Cancelled';
+  const visibleRequests = requests.filter(r => notHidden(r) && (viewMode === 'all' || relevantToMe(r)));
+  const mineCount = requests.filter(r => notHidden(r) && relevantToMe(r)).length;
+  const allCount  = requests.filter(notHidden).length;
 
   const buOptions     = Array.from(new Set(visibleRequests.map(r => r.hpenBusinessUnit).filter(Boolean))).sort();
   const regionOptions = Array.from(new Set(visibleRequests.map(r => r.buRegion).filter(Boolean))).sort();
@@ -1046,6 +1054,15 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
         {/* Filter bar */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'inline-flex', border: `1px solid ${HPE_NAVY}`, borderRadius: 4, overflow: 'hidden' }}>
+            {([['mine', `👤 Relevant to me (${mineCount})`], ['all', `🌐 All (${allCount})`]] as const).map(([mode, label]) => (
+              <button key={mode} type="button" onClick={() => setViewMode(mode)}
+                style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                  background: viewMode === mode ? HPE_NAVY : '#fff', color: viewMode === mode ? '#fff' : '#605e5c' }}>
+                {label}
+              </button>
+            ))}
+          </div>
           <input
             type="text"
             value={filterSearch}
@@ -1138,7 +1155,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                     </td>
                   </tr>
                 )}
-                {!activeTile && showPendingSection && pendingRows.map((req, i) => renderRow(req, i, true))}
+                {!activeTile && showPendingSection && pendingRows.map((req, i) => renderRow(req, i))}
 
                 {/* ── Active Engagements ── */}
                 {!activeTile && (
