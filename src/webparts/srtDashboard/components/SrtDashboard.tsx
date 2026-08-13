@@ -130,6 +130,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [actAsInput, setActAsInput]             = useState('');
   const [realIsAdmin, setRealIsAdmin]           = useState(false);
   const [showPendingSection, setShowPendingSection]     = useState(true);
+  const [showAcceptedSection, setShowAcceptedSection]   = useState(true);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
@@ -446,15 +447,17 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   const tileFiltered = (() => {
     if (!activeTile) return visibleRequests;
-    if (activeTile === 'Pending')        return visibleRequests.filter(r => r.requestStatus === 'Pending');
+    if (activeTile === 'Awaiting SED')   return visibleRequests.filter(r => r.requestStatus === 'Pending');
     if (activeTile === 'Needs Info')     return visibleRequests.filter(r => r.requestStatus === 'Needs Info');
-    if (activeTile === 'Active')         return visibleRequests.filter(r => ['Accepted', 'Scheduled', 'In Progress'].includes(r.requestStatus));
+    if (activeTile === 'Awaiting SSE')   return visibleRequests.filter(r => r.requestStatus === 'Accepted');
+    if (activeTile === 'Active')         return visibleRequests.filter(r => ['Scheduled', 'In Progress'].includes(r.requestStatus));
     if (activeTile === 'Complete')       return visibleRequests.filter(r => r.requestStatus === 'Complete');
     if (activeTile === 'Needs Sign-off') return visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy);
     return visibleRequests;
   })();
 
   const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
+  const acceptedRows  = visibleRequests.filter(r => r.requestStatus === 'Accepted');
   const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete');
 
   const isStrategicReq = (r: ICseRequest): boolean => r.engagementType === 'Strategic Engagement';
@@ -462,6 +465,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   const filteredRequests = tileFiltered.filter(r => {
     if (!activeTile && r.requestStatus === 'Pending') return false;
+    if (!activeTile && r.requestStatus === 'Accepted') return false;
     if (!activeTile && r.requestStatus === 'Complete') return false;
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
@@ -481,9 +485,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
-  const pending      = visibleRequests.filter(r => r.requestStatus === 'Pending');
+  const pending      = pendingRows;
   const needsInfo    = visibleRequests.filter(r => r.requestStatus === 'Needs Info');
-  const active       = visibleRequests.filter(r => r.requestStatus === 'Accepted' || r.requestStatus === 'Scheduled' || r.requestStatus === 'In Progress');
+  const awaitingSse  = acceptedRows;
+  const active       = visibleRequests.filter(r => r.requestStatus === 'Scheduled' || r.requestStatus === 'In Progress');
   const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete');
   const needsSignOff = complete.filter(r => !r.signedOffBy);
 
@@ -1028,10 +1033,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       </div>
 
       {/* KPI tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, padding: '16px 20px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, padding: '16px 20px 0' }}>
         {[
-          { label: 'Pending',        count: pending.length,       bg: '#edebe9', color: '#605e5c' },
+          { label: 'Awaiting SED',   count: pending.length,       bg: '#edebe9', color: '#605e5c' },
           { label: 'Needs Info',     count: needsInfo.length,     bg: '#f0e6ff', color: '#6b2faf' },
+          { label: 'Awaiting SSE',   count: awaitingSse.length,   bg: '#ffe8cc', color: '#b45309' },
           { label: 'Active',         count: active.length,        bg: '#eff6fc', color: '#0078d4' },
           { label: 'Complete',       count: complete.length,      bg: '#e8faf3', color: '#107c10' },
           { label: 'Needs Sign-off', count: needsSignOff.length,  bg: '#fff4ce', color: '#8a6000' },
@@ -1204,15 +1210,25 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 </tr>
               </thead>
               <tbody>
-                {/* ── Awaiting Acceptance ── */}
+                {/* ── Awaiting Acceptance — SED ── */}
                 {!activeTile && pendingRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowPendingSection(s => !s)}>
                     <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
-                      ⏳ Awaiting Acceptance ({pendingRows.length}) {showPendingSection ? '▾' : '▸'}
+                      ⏳ Awaiting Acceptance — SED ({pendingRows.length}) {showPendingSection ? '▾' : '▸'}
                     </td>
                   </tr>
                 )}
                 {!activeTile && showPendingSection && pendingRows.map((req, i) => renderRow(req, i))}
+
+                {/* ── Pending Confirmation — SSE (David accepted; awaiting Charlie's dates) ── */}
+                {!activeTile && acceptedRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowAcceptedSection(s => !s)}>
+                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#ffe8cc', fontWeight: 700, color: '#b45309', fontSize: 12, userSelect: 'none' as const }}>
+                      📋 Pending Confirmation — SSE ({acceptedRows.length}) {showAcceptedSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showAcceptedSection && acceptedRows.map((req, i) => renderRow(req, i))}
 
                 {/* ── Active Engagements ── */}
                 {!activeTile && (
