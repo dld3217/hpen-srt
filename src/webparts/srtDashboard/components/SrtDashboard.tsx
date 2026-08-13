@@ -126,6 +126,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [filterType, setFilterType]             = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
   const [viewMode, setViewMode]                 = useState<'mine' | 'all'>('mine');
+  const [actAs, setActAs]                       = useState<string>(() => (localStorage.getItem('srt_actAs') || '').toLowerCase());
+  const [actAsInput, setActAsInput]             = useState('');
+  const [realIsAdmin, setRealIsAdmin]           = useState(false);
   const [showPendingSection, setShowPendingSection]     = useState(true);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
@@ -140,24 +143,45 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
   const tableRef                                = useRef<HTMLDivElement>(null);
 
-  const userEmail    = context.pageContext.user.email.toLowerCase();
-  const displayName  = context.pageContext.user.displayName || userEmail;
-  const userName     = displayName.includes(',')
+  const realEmail    = context.pageContext.user.email.toLowerCase();
+  const userEmail    = actAs || realEmail;                 // EFFECTIVE identity (spoofable for testing)
+  const displayName  = context.pageContext.user.displayName || realEmail;
+  const realFirst    = displayName.includes(',')
     ? displayName.split(',')[1].trim().split(' ')[0]
     : displayName.split(' ')[0];
+  const userName     = actAs ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
 
+  const applyActAs = (email: string): void => {
+    const e = email.trim().toLowerCase();
+    if (!e) return;
+    setActAs(e); localStorage.setItem('srt_actAs', e); setActAsInput(''); setExpandedId(null);
+  };
+  const resetActAs = (): void => {
+    setActAs(''); localStorage.removeItem('srt_actAs'); setActAsInput(''); setExpandedId(null);
+  };
+
+  // Requests load once.
   useEffect(() => {
-    const svc       = new CseRequestService(sp);
-    const configSvc = new ConfigService(sp);
-    Promise.all([svc.getAll(), configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail)])
-      .then(([all, admin, sed]) => {
-        setRequests(all); setIsAdmin(admin); setIsSED(sed);
-        // Context default: SEDs/admins land on the full queue, everyone else on what's relevant to them.
-        setViewMode(admin || sed ? 'all' : 'mine');
-        setLoading(false);
-      })
+    new CseRequestService(sp).getAll()
+      .then(all => { setRequests(all); setLoading(false); })
       .catch(err => { setError(String(err)); setLoading(false); });
   }, []);
+
+  // Real admin flag — from the REAL user, computed once — gates the test bar so you can't lock yourself out.
+  useEffect(() => {
+    new ConfigService(sp).isSuperUser(realEmail).then(setRealIsAdmin).catch(() => undefined);
+  }, []);
+
+  // Role + default view for the EFFECTIVE user — recomputes whenever you "view as" someone.
+  useEffect(() => {
+    const configSvc = new ConfigService(sp);
+    Promise.all([configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail)])
+      .then(([admin, sed]) => {
+        setIsAdmin(admin); setIsSED(sed);
+        setViewMode(admin || sed ? 'all' : 'mine');
+      })
+      .catch(() => undefined);
+  }, [userEmail]);
 
   useEffect(() => {
     if (loading) return;
@@ -928,6 +952,33 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   return (
     <div style={{ fontFamily: 'inherit', minHeight: 400, width: '100%' }}>
+
+      {/* ── Admin-only TEST bar: view the dashboard as another user ── */}
+      {realIsAdmin && (
+        <div style={{ background: actAs ? '#8a6000' : '#3b3a39', color: '#fff', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>🧪 TEST MODE</span>
+          {actAs ? (
+            <>
+              <span>👁 Viewing as <strong>{actAs}</strong> — role &amp; scope reflect this user (writes still happen as you).</span>
+              <button type="button" onClick={resetActAs}
+                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, background: '#fff', color: '#8a6000', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}>
+                ↺ Reset to me
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ color: 'rgba(255,255,255,0.75)' }}>View the dashboard as another user:</span>
+              <input value={actAsInput} onChange={e => setActAsInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') applyActAs(actAsInput); }}
+                placeholder="user@hpe.com" style={{ fontSize: 12, padding: '3px 8px', border: '1px solid #888', borderRadius: 4, minWidth: 220 }} />
+              <button type="button" onClick={() => applyActAs(actAsInput)}
+                style={{ fontSize: 11, fontWeight: 700, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, padding: '5px 12px', cursor: 'pointer' }}>
+                View as
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {showAdmin && <SrtAdminPanel sp={sp} context={context} onClose={() => setShowAdmin(false)} />}
 
