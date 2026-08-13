@@ -502,7 +502,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail))
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
-    const showDateActions = (isAdmin || isAssignedSse) && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
+    const showDateActions = (isAdmin || isAssignedSse)
+      && ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1   // only AFTER SED acceptance
+      && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
     const colSpan       = 12 + (isSED ? 1 : 0) + (isAdmin ? 1 : 0);
     const isStrat       = isStrategicReq(req);
     const purposeText   = req.engagementPurpose === 'Other' ? (req.engagementPurposeOther || 'Other') : (req.engagementPurpose || '');
@@ -722,6 +724,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {isExpanded && dateEdit && (
         <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
           <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ maxWidth: 1180 }}>
             {/* ── SSE pending action, surfaced at the very top ── */}
             {showDateActions && (
               <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff4ce', border: '1px solid #d9a300', borderRadius: 6 }}>
@@ -954,6 +957,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {req.scheduleStatus === 'Rescheduling' && ' — SSE declined the previous dates. Update and save to re-propose.'}
               </div>
             )}
+            </div>
           </td>
         </tr>
       )}
