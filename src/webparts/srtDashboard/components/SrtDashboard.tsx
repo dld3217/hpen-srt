@@ -94,6 +94,23 @@ const FRONT_DOOR_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePa
 const HDR_GREEN: React.CSSProperties = { padding: '5px 14px', background: HPE_GREEN, border: 'none', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' };
 const HDR_OUTLINE: React.CSSProperties = { padding: '5px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' };
 
+// TEST MODE shortcuts — type a nickname instead of the full email
+const ACT_AS_ALIASES: Record<string, string> = {
+  david: 'david.ball@hpe.com',
+  charlie: 'charlie.clemmer@hpe.com',
+  mike: 'mike.bruno@hpe.com',
+  rick: 'rick.watkins@hpe.com',
+};
+// Resolve "David" / "Charlie Clemmer" / bare "john.smith" → a usable email.
+function resolveActAs(raw: string): string {
+  const t = (raw || '').trim().toLowerCase();
+  if (!t) return '';
+  if (ACT_AS_ALIASES[t]) return ACT_AS_ALIASES[t];
+  const first = t.split(/\s+/)[0];
+  if (ACT_AS_ALIASES[first]) return ACT_AS_ALIASES[first];
+  return t.indexOf('@') === -1 ? `${t}@hpe.com` : t;
+}
+
 export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [requests, setRequests]     = useState<ICseRequest[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -153,7 +170,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const userName     = actAs ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
 
   const applyActAs = (email: string): void => {
-    const e = email.trim().toLowerCase();
+    const e = resolveActAs(email);
     if (!e) return;
     setActAs(e); localStorage.setItem('srt_actAs', e); setActAsInput(''); setExpandedId(null);
   };
@@ -982,10 +999,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             </>
           ) : (
             <>
-              <span style={{ color: 'rgba(255,255,255,0.75)' }}>View the dashboard as another user:</span>
+              <span style={{ color: 'rgba(255,255,255,0.75)' }}>View as:</span>
               <input value={actAsInput} onChange={e => setActAsInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') applyActAs(actAsInput); }}
-                placeholder="user@hpe.com" style={{ fontSize: 12, padding: '3px 8px', border: '1px solid #888', borderRadius: 4, minWidth: 220 }} />
+                placeholder="David, Charlie, or user@hpe.com" style={{ fontSize: 12, padding: '3px 8px', border: '1px solid #888', borderRadius: 4, minWidth: 240 }} />
               <button type="button" onClick={() => applyActAs(actAsInput)}
                 style={{ fontSize: 11, fontWeight: 700, background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, padding: '5px 12px', cursor: 'pointer' }}>
                 View as
