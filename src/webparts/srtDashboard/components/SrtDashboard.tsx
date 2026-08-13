@@ -8,8 +8,15 @@ import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService } from '../../../services/ConfigService';
 import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
+import { DISPOSITION_STYLE, IEnvironmentRow } from '../../../models/StrategicEngagement';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
+
+const parseEnvRows = (json: string | undefined): IEnvironmentRow[] => {
+  try { const a = JSON.parse(json || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+};
+const LTH: React.CSSProperties = { textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#8a7fb0', textTransform: 'uppercase', letterSpacing: '0.3px', padding: '4px 8px', borderBottom: '1px solid #e0d8f0' };
+const LTD: React.CSSProperties = { fontSize: 12, padding: '5px 8px', borderBottom: '1px solid #efeaf7', verticalAlign: 'top' };
 
 const emailToName = (email: string): string => {
   if (!email) return '';
@@ -677,6 +684,61 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {isExpanded && dateEdit && (
         <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
           <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
+            {/* ── Strategic Engagement review (competitive intel for the SSE) ── */}
+            {isStrat && (
+              <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #e0d8f0' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>🎯 Strategic Engagement — Review</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', marginBottom: 4 }}>Engagement Purpose</div>
+                    <div style={{ fontSize: 13, color: '#323130' }}>
+                      {req.engagementPurpose || '—'}{req.engagementPurpose === 'Other' && req.engagementPurposeOther ? `: ${req.engagementPurposeOther}` : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#555', marginBottom: 4 }}>Desired Outcome(s)</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {(req.desiredOutcome && req.desiredOutcome.length ? req.desiredOutcome : ['—']).map((o, oi) => (
+                        <span key={oi} style={{ fontSize: 11, fontWeight: 600, background: '#f0e6ff', color: '#6b2faf', borderRadius: 10, padding: '2px 9px' }}>{o}</span>
+                      ))}
+                    </div>
+                    {req.desiredOutcomeDetail && <div style={{ fontSize: 11, color: '#605e5c', marginTop: 5, fontStyle: 'italic' }}>{req.desiredOutcomeDetail}</div>}
+                  </div>
+                </div>
+                {(() => {
+                  const envRows = parseEnvRows(req.currentEnvironment);
+                  if (envRows.length === 0) return <div style={{ fontSize: 12, color: '#888' }}>No solution landscape captured.</div>;
+                  return (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', marginBottom: 6 }}>Solution Landscape</div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr>
+                          <th style={LTH}>We Position</th><th style={LTH}>Current Vendor</th><th style={LTH}>Product / Version</th><th style={LTH}>Disposition</th><th style={LTH}>Detail</th>
+                        </tr></thead>
+                        <tbody>
+                          {envRows.map((row, ri) => {
+                            const badge = DISPOSITION_STYLE[row.disposition];
+                            return (
+                              <tr key={ri}>
+                                <td style={{ ...LTD, fontWeight: 600 }}>{row.solution || '—'}</td>
+                                <td style={LTD}>{row.vendor || '—'}</td>
+                                <td style={LTD}>{[row.product, row.version].filter(Boolean).join(' / ') || '—'}</td>
+                                <td style={LTD}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap', background: badge ? badge.bg : '#f0f0f0', color: badge ? badge.color : '#888' }}>
+                                    {badge ? badge.label : (row.disposition || '—')}
+                                  </span>
+                                </td>
+                                <td style={{ ...LTD, color: '#605e5c' }}>{row.detail || '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Remote Support</div>
