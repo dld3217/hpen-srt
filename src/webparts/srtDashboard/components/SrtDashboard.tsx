@@ -353,6 +353,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } finally { setSavingDates(false); }
   };
 
+  // SSE accepts a request that has NO proposed dates (TBD) → goes straight to In Progress.
+  const handleSseAccept = async (id: number): Promise<void> => {
+    setSavingId(id);
+    try {
+      await new CseRequestService(sp).updateStatus(id, 'In Progress');
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, requestStatus: 'In Progress' } : r));
+      setExpandedId(null);
+    } finally { setSavingId(null); }
+  };
+
   const handleDeclineDatesConfirm = async (id: number): Promise<void> => {
     setSavingDates(true);
     try {
@@ -509,6 +519,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete');
   const needsSignOff = complete.filter(r => !r.signedOffBy);
 
+  // Actions column shows for SEDs, admins, or an SSE who has an Accepted request assigned to them.
+  const iAmAssignedAccepted = visibleRequests.some(r => r.requestStatus === 'Accepted' && (r.requestedCse || '').toLowerCase().includes(userEmail));
+  const showActionsCol = isSED || isAdmin || iAmAssignedAccepted;
+
   const renderRow = (req: ICseRequest, i: number, hideReassign = false): JSX.Element => {
     const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
     const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus] || SCHEDULE_STATUS_STYLE.TBD;
@@ -516,13 +530,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const sseName       = parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse);
     const isExpanded    = expandedId === req.id;
     const isCancelled   = req.requestStatus === 'Cancelled';
-    const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail))
-                          && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
-    const showDateActions = (isAdmin || isAssignedSse)
-      && ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1   // only AFTER SED acceptance
-      && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
-    const colSpan       = 12 + (isSED ? 1 : 0) + (isAdmin ? 1 : 0);
+    const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail) || (isAssignedSse && req.requestStatus === 'Accepted'))
+                          && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
+    const noDates        = req.scheduleStatus === 'TBD';
+    const showSseActions = (isAssignedSse || isAdmin) && req.requestStatus === 'Accepted';
+    const colSpan       = 12 + (showActionsCol ? 1 : 0) + (isAdmin ? 1 : 0);
     const isStrat       = isStrategicReq(req);
     const purposeText   = req.engagementPurpose === 'Other' ? (req.engagementPurposeOther || 'Other') : (req.engagementPurpose || '');
     const durationText  = req.remoteDuration || req.onsiteDuration || '';
@@ -624,7 +637,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{req.scheduleStatus}</span>
           {!req.remoteTbd && req.remoteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}</div>}
           {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
-          {showDateActions && <div style={{ display: 'inline-block', marginTop: 4, fontSize: 10, fontWeight: 700, color: '#8a6000', background: '#fff4ce', border: '1px solid #d9a300', borderRadius: 8, padding: '1px 7px' }}>⏳ Confirm dates</div>}
         </td>
         <td style={TD} onClick={e => e.stopPropagation()}>
           {isAdmin ? (
@@ -665,8 +677,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           )}
         </td>
         <td style={{ ...TD, fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>{fmtDate(req.modified || '') || '—'}</td>
-        {isSED && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
-          {req.requestStatus === 'Pending' && (
+        {showActionsCol && <td style={{ ...TD, minWidth: 160 }} onClick={e => e.stopPropagation()}>
+          {req.requestStatus === 'Pending' && (isSED || isAdmin) && (
             decliningId === req.id ? (
               <div>
                 <input type="text" value={declineNote} onChange={e => setDeclineNote(e.target.value)} placeholder="Reason (optional)"
@@ -731,7 +743,38 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               </div>
             )
           )}
-          {req.requestStatus !== 'Pending' && (
+          {/* ── SSE action on an Accepted request (Charlie's turn) ── */}
+          {showSseActions && (
+            noDates ? (
+              <button disabled={savingId === req.id} onClick={() => handleSseAccept(req.id!).catch(() => undefined)}
+                title="No dates were proposed — accept and start the engagement"
+                style={{ fontSize: 11, padding: '4px 12px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                {savingId === req.id ? '…' : '✓ Accept'}
+              </button>
+            ) : declineDatesId === req.id ? (
+              <div>
+                <input type="text" value={declineDatesNote} onChange={e => setDeclineDatesNote(e.target.value)} placeholder="Reason (optional)"
+                  style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button disabled={savingDates} onClick={() => handleDeclineDatesConfirm(req.id!).catch(() => undefined)}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>{savingDates ? '…' : 'Confirm'}</button>
+                  <button onClick={() => { setDeclineDatesId(null); setDeclineDatesNote(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
+                  style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✓ Confirm</button>
+                <button onClick={() => setDeclineDatesId(req.id!)}
+                  style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✕ Decline</button>
+                <button onClick={() => handleExpand(req)}
+                  style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✎ New dates</button>
+              </div>
+            )
+          )}
+          {/* ── nothing to act on for this viewer/row ── */}
+          {!(req.requestStatus === 'Pending' && (isSED || isAdmin)) && !showSseActions && (
             <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
           )}
         </td>}
@@ -742,33 +785,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
           <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
             <div style={{ maxWidth: 1180 }}>
-            {/* ── SSE pending action, surfaced at the very top ── */}
-            {showDateActions && (
-              <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff4ce', border: '1px solid #d9a300', borderRadius: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#8a6000', marginBottom: 10 }}>⏳ Awaiting your date confirmation</div>
-                {declineDatesId === req.id ? (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <input type="text" value={declineDatesNote} onChange={e => setDeclineDatesNote(e.target.value)}
-                      placeholder="Reason dates don't work (optional)"
-                      style={{ flex: 1, minWidth: 220, fontSize: 12, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
-                    <button disabled={savingDates} onClick={() => handleDeclineDatesConfirm(req.id!).catch(() => undefined)}
-                      style={{ padding: '6px 16px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      {savingDates ? '…' : 'Confirm Decline'}
-                    </button>
-                    <button onClick={() => { setDeclineDatesId(null); setDeclineDatesNote(''); }}
-                      style={{ padding: '6px 14px', background: '#fff', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
-                      style={{ padding: '7px 20px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✓ Confirm Dates</button>
-                    <button onClick={() => setDeclineDatesId(req.id!)}
-                      style={{ padding: '7px 16px', background: '#fff', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✕ Dates Don&apos;t Work</button>
-                    <span style={{ fontSize: 11, color: '#8a6000' }}>Review the proposed dates below, then confirm or send back.</span>
-                  </div>
-                )}
-              </div>
-            )}
             {/* ── Strategic Engagement review (competitive intel for the SSE) ── */}
             {isStrat && (
               <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #e0d8f0' }}>
@@ -1227,7 +1243,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   <th style={TH}>Temp</th>
                   <th style={TH}>Sign-off</th>
                   <th style={TH}>Updated</th>
-                  {isSED && <th style={TH}>Actions</th>}
+                  {showActionsCol && <th style={TH}>Actions</th>}
                 </tr>
               </thead>
               <tbody>

@@ -53,7 +53,7 @@ const EMPTY_FORM: IStrategicFormData = {
   customerName: '', hpenBusinessUnit: '', buRegion: '', primarySe: '', requestedSse: '',
   engagementPurpose: '', engagementPurposeOther: '', landscape: [], notes: '',
   desiredOutcomes: [], objectionText: '', outcomeOtherText: '',
-  supportType: '', remoteTbd: false, onsiteTbd: false,
+  supportType: '', remoteTbd: true, onsiteTbd: true,
   remoteStart: '', remoteEnd: '', remoteDuration: '1-hour meeting',
   onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
   csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0,
