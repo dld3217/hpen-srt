@@ -486,6 +486,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (activeTile === 'Active')         return visibleRequests.filter(r => ['Scheduled', 'In Progress'].includes(r.requestStatus));
     if (activeTile === 'Complete')       return visibleRequests.filter(r => r.requestStatus === 'Complete');
     if (activeTile === 'Needs Sign-off') return visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy);
+    if (activeTile === 'Declined')       return visibleRequests.filter(r => r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled');
     return visibleRequests;
   })();
 
@@ -533,6 +534,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const parked       = parkedRows;
   const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete');
   const needsSignOff = complete.filter(r => !r.signedOffBy);
+  const declined     = declinedRows;
 
   // Actions column shows for SEDs, admins, or an SSE who has an Accepted request assigned to them.
   const iAmAssignedAccepted = visibleRequests.some(r => r.requestStatus === 'Accepted' && (r.requestedCse || '').toLowerCase().includes(userEmail));
@@ -1085,15 +1087,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       </div>
 
       {/* KPI tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, padding: '16px 20px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 12, padding: '16px 20px 0' }}>
         {[
           { label: 'Awaiting SED',   count: pending.length,       bg: '#edebe9', color: '#605e5c' },
           { label: 'Needs Info',     count: needsInfo.length,     bg: '#f0e6ff', color: '#6b2faf' },
           { label: 'Awaiting SSE',   count: awaitingSse.length,   bg: '#ffe8cc', color: '#b45309' },
-          { label: 'Active',         count: active.length,        bg: '#eff6fc', color: '#0078d4' },
           { label: 'Parked',         count: parked.length,        bg: '#e6e2f0', color: '#5b4b8a' },
+          { label: 'Active',         count: active.length,        bg: '#eff6fc', color: '#0078d4' },
           { label: 'Complete',       count: complete.length,      bg: '#e8faf3', color: '#107c10' },
           { label: 'Needs Sign-off', count: needsSignOff.length,  bg: '#fff4ce', color: '#8a6000' },
+          { label: 'Declined',       count: declined.length,      bg: '#fde7e9', color: '#a4262c' },
         ].map(tile => {
           const isActive = activeTile === tile.label;
           return (
