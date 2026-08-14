@@ -486,21 +486,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     return visibleRequests;
   })();
 
-  const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
-  const acceptedRows  = visibleRequests.filter(r => r.requestStatus === 'Accepted');
-  const parkedRows    = visibleRequests.filter(r => r.requestStatus === 'Parked');
-  const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete');
-  const declinedRows  = visibleRequests.filter(r => r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled');
-
   const isStrategicReq = (r: ICseRequest): boolean => r.engagementType === 'Strategic Engagement';
   const reqType = (r: ICseRequest): string => isStrategicReq(r) ? 'Strategic' : 'POC';
-
-  const filteredRequests = tileFiltered.filter(r => {
-    if (!activeTile && r.requestStatus === 'Pending') return false;
-    if (!activeTile && r.requestStatus === 'Accepted') return false;
-    if (!activeTile && r.requestStatus === 'Parked') return false;
-    if (!activeTile && r.requestStatus === 'Complete') return false;
-    if (!activeTile && (r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled')) return false;
+  // Shared filter-bar predicate — applied to EVERY section, not just Active.
+  const matchesFilters = (r: ICseRequest): boolean => {
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
@@ -508,6 +497,21 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (filterType !== 'All' && reqType(r) !== filterType) return false;
     if (filterSearch && !r.customerName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
     return true;
+  };
+
+  const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending' && matchesFilters(r));
+  const acceptedRows  = visibleRequests.filter(r => r.requestStatus === 'Accepted' && matchesFilters(r));
+  const parkedRows    = visibleRequests.filter(r => r.requestStatus === 'Parked' && matchesFilters(r));
+  const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete' && matchesFilters(r));
+  const declinedRows  = visibleRequests.filter(r => (r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled') && matchesFilters(r));
+
+  const filteredRequests = tileFiltered.filter(r => {
+    if (!activeTile && r.requestStatus === 'Pending') return false;
+    if (!activeTile && r.requestStatus === 'Accepted') return false;
+    if (!activeTile && r.requestStatus === 'Parked') return false;
+    if (!activeTile && r.requestStatus === 'Complete') return false;
+    if (!activeTile && (r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled')) return false;
+    return matchesFilters(r);
   }).sort((a, b) => {
     const PRIORITY_ORDER: Record<string, number> = { 'High': 0, 'Medium': 1, 'Low': 2, 'Critical': -1 };
     const STATUS_ORDER: Record<string, number> = { 'Pending': 0, 'Needs Info': 1, 'Accepted': 2, 'Scheduled': 3, 'In Progress': 4, 'Complete': 5, 'Declined': 6, 'Cancelled': 7 };
