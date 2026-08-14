@@ -55,7 +55,7 @@ export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: str
   'Pending':     { bg: '#edebe9', color: '#605e5c' },
   'Accepted':    { bg: '#eff6fc', color: '#0078d4' },
   'Scheduled':   { bg: '#e0f4f4', color: '#007a7a' },
-  'In Progress': { bg: '#fff4ce', color: '#8a6000' },
+  'In Progress': { bg: '#ece1f7', color: '#4b2e83' },
   'Parked':      { bg: '#e6e2f0', color: '#5b4b8a' },
   'Complete':    { bg: '#e8faf3', color: '#107c10' },
   'Declined':    { bg: '#fde7e9', color: '#a4262c' },
@@ -64,8 +64,8 @@ export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: str
 };
 
 export const CUST_TEMP_STYLE: Record<CustTemp, { bg: string; color: string; label: string }> = {
-  'Low':      { bg: '#e8faf3', color: '#107c10', label: 'Low' },
-  'Normal':   { bg: '#edebe9', color: '#605e5c', label: 'Normal' },
+  'Low':      { bg: '#f0f0f0', color: '#605e5c', label: 'Low' },
+  'Normal':   { bg: '#dceee1', color: '#1e6b3a', label: 'Normal' },
   'High':     { bg: '#fff4ce', color: '#8a6000', label: 'High' },
   'Critical': { bg: '#fde7e9', color: '#a4262c', label: 'Critical' },
 };

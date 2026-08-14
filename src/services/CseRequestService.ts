@@ -218,6 +218,10 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ CustTemp: custTemp });
   }
 
+  async updatePriority(id: number, priority: string): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ CSEPriority: priority });
+  }
+
   async signOff(id: number, signedOffBy: string): Promise<void> {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
       SignedOffBy: signedOffBy,

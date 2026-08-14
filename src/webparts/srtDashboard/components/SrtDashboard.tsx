@@ -419,6 +419,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } catch { /* ignore */ }
   };
 
+  const handlePriority = async (id: number, priority: string): Promise<void> => {
+    try {
+      await new CseRequestService(sp).updatePriority(id, priority);
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, csePriority: priority } : r));
+    } catch { /* ignore */ }
+  };
+
   const handleSolutionSave = async (id: number): Promise<void> => {
     const codes = Array.from(editSolCodes).join(',');
     try {
@@ -632,12 +639,20 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <span style={{ textDecoration: isAdmin ? 'underline dotted' : 'none' }}>{codeToName(req.solutionsFocus)}</span>
           )}
         </td>
-        <td style={TD}>
-          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-            background: req.csePriority === 'High' ? '#fde7e9' : req.csePriority === 'Medium' ? '#fff4ce' : '#e8faf3',
-            color: req.csePriority === 'High' ? '#a4262c' : req.csePriority === 'Medium' ? '#8a6000' : '#107c10' }}>
-            {req.csePriority || '—'}
-          </span>
+        <td style={TD} onClick={e => e.stopPropagation()}>
+          {(() => {
+            const isHi = req.csePriority === 'High' || req.csePriority === 'Critical';
+            const bg = isHi ? '#fde7e9' : req.csePriority === 'Medium' ? '#fff4ce' : '#e8faf3';
+            const color = isHi ? '#a4262c' : req.csePriority === 'Medium' ? '#8a6000' : '#107c10';
+            return (isAdmin || isAssignedSse) ? (
+              <select value={req.csePriority || 'Medium'} onChange={e => handlePriority(req.id!, e.target.value).catch(() => undefined)}
+                style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, border: 'none', cursor: 'pointer', background: bg, color }}>
+                {['Low', 'Medium', 'High', 'Critical'].map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            ) : (
+              <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700, background: bg, color }}>{req.csePriority || '—'}</span>
+            );
+          })()}
         </td>
         <td style={TD} onClick={e => e.stopPropagation()}>
           {(isAdmin || isAssignedSse) ? (
