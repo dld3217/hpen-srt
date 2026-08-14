@@ -56,7 +56,9 @@ const toDateInput = (iso: string): string => iso ? iso.substring(0, 10) : '';
 
 const fmtDate = (iso: string): string => {
   if (!iso) return '';
-  const d = new Date(iso);
+  // Treat as a calendar date (YYYY-MM-DD…) so UTC→local never rolls it back a day.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
@@ -549,7 +551,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   const renderRow = (req: ICseRequest, i: number, hideReassign = false): JSX.Element => {
     const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
-    const schedStyle    = SCHEDULE_STATUS_STYLE[req.scheduleStatus] || SCHEDULE_STATUS_STYLE.TBD;
+    // A "Dates Proposed/Confirmed" flag is dishonest if no actual date was entered — show TBD until there is one.
+    const hasRealDates  = (!req.remoteTbd && !!req.remoteStart) || (!req.onsiteTbd && !!req.onsiteStart);
+    const effSchedStatus: ScheduleStatus = (!hasRealDates && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Dates Confirmed')) ? 'TBD' : req.scheduleStatus;
+    const schedStyle    = SCHEDULE_STATUS_STYLE[effSchedStatus] || SCHEDULE_STATUS_STYLE.TBD;
     const tempStyle     = CUST_TEMP_STYLE[req.custTemp]    || CUST_TEMP_STYLE.Normal;
     const sseName       = parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse);
     const isExpanded    = expandedId === req.id;
@@ -666,7 +671,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           )}
         </td>
         <td style={TD}>
-          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{req.scheduleStatus}</span>
+          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{effSchedStatus}</span>
           {!req.remoteTbd && req.remoteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}</div>}
           {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
         </td>
