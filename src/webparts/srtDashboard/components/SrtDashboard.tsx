@@ -639,7 +639,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
         </td>
         <td style={TD} onClick={e => e.stopPropagation()}>
-          {isAdmin ? (
+          {(isAdmin || isAssignedSse) ? (
             <select value={req.custTemp}
               onChange={e => handleCustTemp(req.id!, e.target.value).catch(() => undefined)}
               style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: tempStyle.bg, color: tempStyle.color, border: 'none', cursor: 'pointer' }}>
