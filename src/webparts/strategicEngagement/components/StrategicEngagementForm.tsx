@@ -397,11 +397,13 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         const savedRegion = localStorage.getItem('srt_region') || '';
         const buOk = !!(savedBU && bur[savedBU]);
         const validRegion = (buOk && savedRegion && (bur[savedBU] as IBUConfig)?.regions?.[savedRegion]) ? savedRegion : '';
+        const savedSse = buOk ? (((bur[savedBU] as IBUConfig)?.regions?.[validRegion]?.sse) || (bur[savedBU] as IBUConfig)?.sse || '') : '';
         setFormData(prev => ({
           ...prev,
           primarySe: prev.primarySe || `${userDisplayName} / ${userEmail}`,
           hpenBusinessUnit: buOk ? savedBU : prev.hpenBusinessUnit,
           buRegion: buOk ? validRegion : prev.buRegion,
+          requestedSse: prev.requestedSse || savedSse,
         }));
         setLoading(false);
       })
@@ -410,6 +412,12 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
 
   const set = (field: keyof IStrategicFormData, value: IStrategicFormData[keyof IStrategicFormData]): void =>
     setFormData(prev => ({ ...prev, [field]: value }));
+
+  // Covering SSE for a BU/Region: region-level wins, else BU-level default. "" if none configured.
+  const resolveSse = (bu: string, region: string): string => {
+    const buCfg = buRegions[bu] as IBUConfig | undefined;
+    return (region && buCfg?.regions?.[region]?.sse) || buCfg?.sse || '';
+  };
 
   const loadDemo = (): void => {
     const s = DEMO_SCENARIOS[demoIdx % DEMO_SCENARIOS.length];
@@ -624,7 +632,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
             <select value={formData.hpenBusinessUnit}
               onChange={e => {
                 const newBU = e.target.value;
-                setFormData(prev => ({ ...prev, hpenBusinessUnit: newBU, buRegion: '' }));
+                const sse = resolveSse(newBU, '');
+                setFormData(prev => ({ ...prev, hpenBusinessUnit: newBU, buRegion: '', requestedSse: sse || prev.requestedSse }));
                 if (newBU) localStorage.setItem('srt_bu', newBU); else localStorage.removeItem('srt_bu');
                 localStorage.removeItem('srt_region');
               }} style={INPUT}>
@@ -635,7 +644,11 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
           <div style={FIELD_ROW}>
             <label style={LABEL_STYLE}>Region <span style={{ color: '#d13438' }}>*</span></label>
             <select value={formData.buRegion}
-              onChange={e => { set('buRegion', e.target.value); if (e.target.value) localStorage.setItem('srt_region', e.target.value); else localStorage.removeItem('srt_region'); }}
+              onChange={e => {
+                const newRegion = e.target.value;
+                setFormData(prev => { const sse = resolveSse(prev.hpenBusinessUnit, newRegion); return { ...prev, buRegion: newRegion, requestedSse: sse || prev.requestedSse }; });
+                if (newRegion) localStorage.setItem('srt_region', newRegion); else localStorage.removeItem('srt_region');
+              }}
               disabled={!formData.hpenBusinessUnit} style={INPUT}>
               <option value="">— Select Region —</option>
               {regionKeys.map(r => <option key={r} value={r}>{r}</option>)}
