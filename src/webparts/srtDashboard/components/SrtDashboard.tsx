@@ -451,7 +451,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const canCancel = (req: ICseRequest): boolean => {
     if (['Complete', 'Cancelled', 'Declined'].includes(req.requestStatus)) return false;
     if (isAdmin) return true;
-    return req.sePrimary.toLowerCase().includes(userEmail) && ['Pending', 'Accepted'].includes(req.requestStatus);
+    // A user can cancel (soft-delete) their OWN work — as the submitter (SEPrimary) or the assigned SSE (RequestedCSE).
+    const isSubmitter   = req.sePrimary.toLowerCase().includes(userEmail);
+    const isAssignedSse = (req.requestedCse || '').toLowerCase().includes(userEmail);
+    return isSubmitter || isAssignedSse;
   };
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading SRT Dashboard…" style={{ marginTop: 40 }} />;
