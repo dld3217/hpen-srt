@@ -548,9 +548,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const needsSignOff = complete.filter(r => !r.signedOffBy);
   const declined     = declinedRows;
 
-  // Actions column shows for SEDs, admins, or an SSE who has an Accepted request assigned to them.
-  const iAmAssignedAccepted = visibleRequests.some(r => r.requestStatus === 'Accepted' && (r.requestedCse || '').toLowerCase().includes(userEmail));
-  const showActionsCol = isSED || isAdmin || iAmAssignedAccepted;
+  // Actions column shows for SEDs, admins, or an assigned SSE who has any pending action
+  // (accept a dateless engagement, or confirm proposed/rescheduled dates on an active one).
+  const sseHasActionOn = (r: ICseRequest): boolean => {
+    if (!(r.requestedCse || '').toLowerCase().includes(userEmail)) return false;
+    const accTbd  = r.requestStatus === 'Accepted' && r.scheduleStatus === 'TBD';
+    const needConf = ['Accepted', 'Scheduled', 'In Progress'].indexOf(r.requestStatus) !== -1
+                     && (r.scheduleStatus === 'Dates Proposed' || r.scheduleStatus === 'Rescheduling');
+    return accTbd || needConf;
+  };
+  const showActionsCol = isSED || isAdmin || visibleRequests.some(sseHasActionOn);
 
   const renderRow = (req: ICseRequest, i: number, hideReassign = false): JSX.Element => {
     const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
