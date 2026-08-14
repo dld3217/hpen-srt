@@ -348,12 +348,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const handleConfirmDates = async (id: number): Promise<void> => {
     setSavingDates(true);
     try {
-      // Confirming dates promotes Accepted -> Scheduled, but must NOT downgrade an already In Progress engagement.
-      const cur = requests.find(r => r.id === id)?.requestStatus;
-      const newStatus: CseRequestStatus = cur === 'In Progress' ? 'In Progress' : 'Scheduled';
-      await new CseRequestService(sp).confirmDates(id, newStatus);
+      // Confirming dates always lands the engagement on Scheduled (dates are set / on the calendar).
+      await new CseRequestService(sp).confirmDates(id, 'Scheduled');
       setRequests(prev => prev.map(r => r.id === id
-        ? { ...r, scheduleStatus: 'Dates Confirmed', requestStatus: newStatus }
+        ? { ...r, scheduleStatus: 'Dates Confirmed', requestStatus: 'Scheduled' }
         : r
       ));
       setExpandedId(null);
