@@ -555,7 +555,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const isExpanded    = expandedId === req.id;
     const isCancelled   = req.requestStatus === 'Cancelled';
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
-    const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail) || (isAssignedSse && req.requestStatus === 'Accepted'))
+    const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail) || isAssignedSse)
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const noDates        = req.scheduleStatus === 'TBD';
     const showSseActions = (isAssignedSse || isAdmin) && req.requestStatus === 'Accepted';
