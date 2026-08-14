@@ -148,6 +148,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [realIsAdmin, setRealIsAdmin]           = useState(false);
   const [showPendingSection, setShowPendingSection]     = useState(true);
   const [showAcceptedSection, setShowAcceptedSection]   = useState(true);
+  const [showParkedSection, setShowParkedSection]       = useState(true);
   const [showDeclinedSection, setShowDeclinedSection]   = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
@@ -478,6 +479,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (activeTile === 'Awaiting SED')   return visibleRequests.filter(r => r.requestStatus === 'Pending');
     if (activeTile === 'Needs Info')     return visibleRequests.filter(r => r.requestStatus === 'Needs Info');
     if (activeTile === 'Awaiting SSE')   return visibleRequests.filter(r => r.requestStatus === 'Accepted');
+    if (activeTile === 'Parked')         return visibleRequests.filter(r => r.requestStatus === 'Parked');
     if (activeTile === 'Active')         return visibleRequests.filter(r => ['Scheduled', 'In Progress'].includes(r.requestStatus));
     if (activeTile === 'Complete')       return visibleRequests.filter(r => r.requestStatus === 'Complete');
     if (activeTile === 'Needs Sign-off') return visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy);
@@ -486,6 +488,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
   const acceptedRows  = visibleRequests.filter(r => r.requestStatus === 'Accepted');
+  const parkedRows    = visibleRequests.filter(r => r.requestStatus === 'Parked');
   const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete');
   const declinedRows  = visibleRequests.filter(r => r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled');
 
@@ -495,6 +498,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const filteredRequests = tileFiltered.filter(r => {
     if (!activeTile && r.requestStatus === 'Pending') return false;
     if (!activeTile && r.requestStatus === 'Accepted') return false;
+    if (!activeTile && r.requestStatus === 'Parked') return false;
     if (!activeTile && r.requestStatus === 'Complete') return false;
     if (!activeTile && (r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled')) return false;
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
@@ -519,6 +523,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const needsInfo    = visibleRequests.filter(r => r.requestStatus === 'Needs Info');
   const awaitingSse  = acceptedRows;
   const active       = visibleRequests.filter(r => r.requestStatus === 'Scheduled' || r.requestStatus === 'In Progress');
+  const parked       = parkedRows;
   const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete');
   const needsSignOff = complete.filter(r => !r.signedOffBy);
 
@@ -630,7 +635,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <select value={req.requestStatus}
               onChange={e => handleStatusChange(req.id!, e.target.value as CseRequestStatus).catch(() => undefined)}
               style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusStyle.bg, color: statusStyle.color, border: 'none', cursor: 'pointer' }}>
-              {(['Pending','Accepted','Scheduled','In Progress','Complete','Declined','Needs Info','Cancelled'] as CseRequestStatus[]).map(s => <option key={s} value={s}>{s}</option>)}
+              {(['Pending','Accepted','Scheduled','In Progress','Parked','Complete','Declined','Needs Info','Cancelled'] as CseRequestStatus[]).map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           ) : (
             <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusStyle.bg, color: statusStyle.color }}>{req.requestStatus}</span>
@@ -1073,12 +1078,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       </div>
 
       {/* KPI tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, padding: '16px 20px 0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, padding: '16px 20px 0' }}>
         {[
           { label: 'Awaiting SED',   count: pending.length,       bg: '#edebe9', color: '#605e5c' },
           { label: 'Needs Info',     count: needsInfo.length,     bg: '#f0e6ff', color: '#6b2faf' },
           { label: 'Awaiting SSE',   count: awaitingSse.length,   bg: '#ffe8cc', color: '#b45309' },
           { label: 'Active',         count: active.length,        bg: '#eff6fc', color: '#0078d4' },
+          { label: 'Parked',         count: parked.length,        bg: '#e6e2f0', color: '#5b4b8a' },
           { label: 'Complete',       count: complete.length,      bg: '#e8faf3', color: '#107c10' },
           { label: 'Needs Sign-off', count: needsSignOff.length,  bg: '#fff4ce', color: '#8a6000' },
         ].map(tile => {
@@ -1269,6 +1275,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   </tr>
                 )}
                 {!activeTile && showAcceptedSection && acceptedRows.map((req, i) => renderRow(req, i))}
+
+                {/* ── Parked — accepted but not ready to move forward ── */}
+                {!activeTile && parkedRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowParkedSection(s => !s)}>
+                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#e6e2f0', fontWeight: 700, color: '#5b4b8a', fontSize: 12, userSelect: 'none' as const }}>
+                      ⏸️ Parked — Not Ready ({parkedRows.length}) {showParkedSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showParkedSection && parkedRows.map((req, i) => renderRow(req, i))}
 
                 {/* ── Active Engagements ── */}
                 {!activeTile && (
