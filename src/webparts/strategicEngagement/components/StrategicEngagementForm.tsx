@@ -767,7 +767,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
           style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, background: submitting ? '#ccc' : HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer' }}>
           {submitting ? 'Sending…' : '🎯 Request Strategic Engagement'}
         </button>
-        <button type="button" disabled={submitting} onClick={() => { if (onBack) onBack(); else window.location.href = SRT_DASHBOARD_URL; }}
+        <button type="button" disabled={submitting} onClick={() => { window.location.href = SRT_DASHBOARD_URL; }}
           style={{ padding: '10px 22px', fontSize: 14, fontWeight: 600, background: '#fff', color: '#605e5c', border: '1px solid #ccc', borderRadius: 4, cursor: submitting ? 'not-allowed' : 'pointer' }}>
           Cancel
         </button>
