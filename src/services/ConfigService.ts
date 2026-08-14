@@ -8,13 +8,13 @@ export interface IRegionConfig {
   semEmail?: string;
   sdEmail?: string;
   managerEmail?: string;
-  sse?: string;          // covering SSE for this region as "Name / email" (overrides the BU-level default)
+  sseEmail?: string;     // covering SSE email for this region (overrides the BU-level default)
 }
 
 export interface IBUConfig {
   sedEmail?: string;
   vpGmEmail?: string;
-  sse?: string;          // default covering SSE for this BU as "Name / email"
+  sseEmail?: string;     // default covering SSE email for this BU (already present on Enterprise-West)
   regions: Record<string, IRegionConfig>;
 }
 

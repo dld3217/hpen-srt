@@ -397,7 +397,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         const savedRegion = localStorage.getItem('srt_region') || '';
         const buOk = !!(savedBU && bur[savedBU]);
         const validRegion = (buOk && savedRegion && (bur[savedBU] as IBUConfig)?.regions?.[savedRegion]) ? savedRegion : '';
-        const savedSse = buOk ? (((bur[savedBU] as IBUConfig)?.regions?.[validRegion]?.sse) || (bur[savedBU] as IBUConfig)?.sse || '') : '';
+        const savedSseEmail = buOk ? (((bur[savedBU] as IBUConfig)?.regions?.[validRegion]?.sseEmail) || (bur[savedBU] as IBUConfig)?.sseEmail || '').trim() : '';
+        const savedSse = savedSseEmail ? `${savedSseEmail.split('@')[0].split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')} / ${savedSseEmail}` : '';
         setFormData(prev => ({
           ...prev,
           primarySe: prev.primarySe || `${userDisplayName} / ${userEmail}`,
@@ -413,10 +414,13 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   const set = (field: keyof IStrategicFormData, value: IStrategicFormData[keyof IStrategicFormData]): void =>
     setFormData(prev => ({ ...prev, [field]: value }));
 
-  // Covering SSE for a BU/Region: region-level wins, else BU-level default. "" if none configured.
+  // Covering SSE for a BU/Region as a "Name / email" picker value: region-level wins, else BU default. "" if none.
+  const emailToName = (email: string): string =>
+    email.split('@')[0].split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
   const resolveSse = (bu: string, region: string): string => {
     const buCfg = buRegions[bu] as IBUConfig | undefined;
-    return (region && buCfg?.regions?.[region]?.sse) || buCfg?.sse || '';
+    const email = ((region && buCfg?.regions?.[region]?.sseEmail) || buCfg?.sseEmail || '').trim();
+    return email ? `${emailToName(email)} / ${email}` : '';
   };
 
   const loadDemo = (): void => {
