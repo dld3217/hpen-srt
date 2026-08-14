@@ -623,7 +623,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           </span>
         </td>
         <td style={TD} onClick={e => e.stopPropagation()}>
-          {isAdmin ? (
+          {(isAdmin || isAssignedSse) ? (
             <select value={req.requestStatus}
               onChange={e => handleStatusChange(req.id!, e.target.value as CseRequestStatus).catch(() => undefined)}
               style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: statusStyle.bg, color: statusStyle.color, border: 'none', cursor: 'pointer' }}>
