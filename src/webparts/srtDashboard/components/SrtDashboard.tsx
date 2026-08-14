@@ -148,6 +148,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [realIsAdmin, setRealIsAdmin]           = useState(false);
   const [showPendingSection, setShowPendingSection]     = useState(true);
   const [showAcceptedSection, setShowAcceptedSection]   = useState(true);
+  const [showDeclinedSection, setShowDeclinedSection]   = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
@@ -486,6 +487,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending');
   const acceptedRows  = visibleRequests.filter(r => r.requestStatus === 'Accepted');
   const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete');
+  const declinedRows  = visibleRequests.filter(r => r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled');
 
   const isStrategicReq = (r: ICseRequest): boolean => r.engagementType === 'Strategic Engagement';
   const reqType = (r: ICseRequest): string => isStrategicReq(r) ? 'Strategic' : 'POC';
@@ -494,6 +496,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (!activeTile && r.requestStatus === 'Pending') return false;
     if (!activeTile && r.requestStatus === 'Accepted') return false;
     if (!activeTile && r.requestStatus === 'Complete') return false;
+    if (!activeTile && (r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled')) return false;
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
     if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
     if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
@@ -1286,6 +1289,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   </tr>
                 )}
                 {!activeTile && showCompletedSection && completedRows.map((req, i) => renderRow(req, i))}
+
+                {/* ── Declined & Cancelled (archive, collapsed by default) ── */}
+                {!activeTile && declinedRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowDeclinedSection(s => !s)}>
+                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#f3f2f1', fontWeight: 700, color: '#a4262c', fontSize: 12, userSelect: 'none' as const }}>
+                      ❌ Declined &amp; Cancelled ({declinedRows.length}) {showDeclinedSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showDeclinedSection && declinedRows.map((req, i) => renderRow(req, i))}
 
               </tbody>
             </table>
