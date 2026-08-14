@@ -348,9 +348,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const handleConfirmDates = async (id: number): Promise<void> => {
     setSavingDates(true);
     try {
-      await new CseRequestService(sp).confirmDates(id);
+      // Confirming dates promotes Accepted -> Scheduled, but must NOT downgrade an already In Progress engagement.
+      const cur = requests.find(r => r.id === id)?.requestStatus;
+      const newStatus: CseRequestStatus = cur === 'In Progress' ? 'In Progress' : 'Scheduled';
+      await new CseRequestService(sp).confirmDates(id, newStatus);
       setRequests(prev => prev.map(r => r.id === id
-        ? { ...r, scheduleStatus: 'Dates Confirmed', requestStatus: 'Scheduled' }
+        ? { ...r, scheduleStatus: 'Dates Confirmed', requestStatus: newStatus }
         : r
       ));
       setExpandedId(null);
@@ -563,7 +566,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail) || isAssignedSse)
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
     const noDates        = req.scheduleStatus === 'TBD';
-    const showSseActions = (isAssignedSse || isAdmin) && req.requestStatus === 'Accepted';
+    // SSE gets an action to (a) accept a dateless engagement, or (b) confirm dates proposed/rescheduled
+    // AT ANY point after SED acceptance — including when the SE adds/changes dates on an already-active engagement.
+    const acceptTbd      = req.requestStatus === 'Accepted' && noDates;
+    const needsDateConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1
+                          && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
+    const showSseActions = (isAssignedSse || isAdmin) && (acceptTbd || needsDateConfirm);
     const colSpan       = 12 + (showActionsCol ? 1 : 0) + (isAdmin ? 1 : 0);
     const isStrat       = isStrategicReq(req);
     const purposeText   = req.engagementPurpose === 'Other' ? (req.engagementPurposeOther || 'Other') : (req.engagementPurpose || '');
@@ -782,7 +790,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           )}
           {/* ── SSE action on an Accepted request (Charlie's turn) ── */}
           {showSseActions && (
-            noDates ? (
+            acceptTbd ? (
               <button disabled={savingId === req.id} onClick={() => handleSseAccept(req.id!).catch(() => undefined)}
                 title="No dates were proposed — accept and start the engagement"
                 style={{ fontSize: 11, padding: '4px 12px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>

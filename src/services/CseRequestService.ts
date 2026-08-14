@@ -193,10 +193,10 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update(update);
   }
 
-  async confirmDates(id: number): Promise<void> {
+  async confirmDates(id: number, requestStatus: CseRequestStatus = 'Scheduled'): Promise<void> {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
       ScheduleStatus: 'Dates Confirmed',
-      RequestStatus: 'Scheduled',
+      RequestStatus: requestStatus,
     });
   }
 
