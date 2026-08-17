@@ -40,6 +40,7 @@ export interface ICseRequest {
   notes: string;
   modified?: string;
   specialtyType?: string;
+  datesProposedBy?: string;       // 'SE' | 'SSE' — who last proposed the current dates; the OTHER party confirms. Blank (legacy) = SE.
   // Strategic Engagement (Phase 1)
   engagementType?: string;        // 'POC Support' | 'Strategic Engagement'
   engagementPurpose?: string;     // see ENGAGEMENT_PURPOSES

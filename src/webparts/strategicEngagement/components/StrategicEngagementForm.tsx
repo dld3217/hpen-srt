@@ -524,6 +524,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         linkedPocId: 0,
         requestStatus: 'Pending',
         scheduleStatus: schedStatus,
+        datesProposedBy: hasFirmDates ? 'SE' : '', // SE proposes at submit; SSE confirms
         requestedCse: formData.requestedSse,
         sseManagerEmail: '',
         cseDescription: formData.notes,

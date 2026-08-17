@@ -15,7 +15,7 @@ const SP_SELECT = [
   'CustomerName', 'POCName', 'OpportunityAmount',
   'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'Modified', 'SpecialtyType',
   'EngagementType', 'EngagementPurpose', 'CurrentEnvironment', 'HasDisplacement', 'EngagementOutcome',
-  'DesiredOutcome', 'DesiredOutcomeDetail', 'EngagementPurposeOther',
+  'DesiredOutcome', 'DesiredOutcomeDetail', 'EngagementPurposeOther', 'DatesProposedBy',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,6 +76,7 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     desiredOutcome: Array.isArray(item.DesiredOutcome) ? item.DesiredOutcome : (item.DesiredOutcome?.results || []),
     desiredOutcomeDetail: item.DesiredOutcomeDetail || '',
     engagementPurposeOther: item.EngagementPurposeOther || '',
+    datesProposedBy: item.DatesProposedBy || '',
   };
 }
 
@@ -90,6 +91,7 @@ export class CseRequestService {
       LinkedPOCId: req.linkedPocId || 0,
       RequestStatus: req.requestStatus,
       ScheduleStatus: req.scheduleStatus || 'TBD',
+      DatesProposedBy: req.datesProposedBy || '',
       RequestedCSE: req.requestedCse,
       SSEManagerEmail: req.sseManagerEmail || '',
       CSEDescription: req.cseDescription,
@@ -176,11 +178,12 @@ export class CseRequestService {
   async updateDates(id: number, dates: {
     remoteTbd?: boolean; remoteStart?: string; remoteEnd?: string; remoteDuration?: string;
     onsiteTbd?: boolean; onsiteStart?: string; onsiteEnd?: string; onsiteDuration?: string; onsiteDestination?: string;
-    scheduleStatus?: ScheduleStatus;
+    scheduleStatus?: ScheduleStatus; datesProposedBy?: string;
   }): Promise<void> {
     const update: Record<string, unknown> = {
       ScheduleStatus: dates.scheduleStatus || 'Dates Proposed',
     };
+    if (dates.datesProposedBy !== undefined) update.DatesProposedBy = dates.datesProposedBy;
     if (dates.remoteTbd !== undefined) update.RemoteTBD = dates.remoteTbd;
     if (dates.remoteStart !== undefined) update.RemoteStart = dates.remoteStart || null;
     if (dates.remoteEnd !== undefined) update.RemoteEnd = dates.remoteEnd || null;
@@ -197,6 +200,7 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
       ScheduleStatus: 'Dates Confirmed',
       RequestStatus: requestStatus,
+      DatesProposedBy: '', // handshake complete — clear the ball-in-court marker
     });
   }
 

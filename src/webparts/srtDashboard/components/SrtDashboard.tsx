@@ -333,11 +333,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const handleSaveDates = async (req: ICseRequest): Promise<void> => {
     if (!dateEdit) return;
     setSavingDates(true);
-    const newStatus: ScheduleStatus = req.scheduleStatus === 'Dates Confirmed' ? 'Rescheduling' : 'Dates Proposed';
+    // Any date save is a fresh proposal awaiting the OTHER party's confirm. Stamp who proposed
+    // (the assigned SSE → 'SSE', otherwise the SE) so the confirm routes to the counterpart.
+    const proposedBy = (req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE';
+    const newStatus: ScheduleStatus = 'Dates Proposed';
     try {
-      await new CseRequestService(sp).updateDates(req.id!, { ...dateEdit, scheduleStatus: newStatus });
+      await new CseRequestService(sp).updateDates(req.id!, { ...dateEdit, scheduleStatus: newStatus, datesProposedBy: proposedBy });
       setRequests(prev => prev.map(r => r.id === req.id
-        ? { ...r, ...dateEdit, scheduleStatus: newStatus }
+        ? { ...r, ...dateEdit, scheduleStatus: newStatus, datesProposedBy: proposedBy }
         : r
       ));
       setExpandedId(null);
@@ -351,7 +354,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       // Confirming dates always lands the engagement on Scheduled (dates are set / on the calendar).
       await new CseRequestService(sp).confirmDates(id, 'Scheduled');
       setRequests(prev => prev.map(r => r.id === id
-        ? { ...r, scheduleStatus: 'Dates Confirmed', requestStatus: 'Scheduled' }
+        ? { ...r, scheduleStatus: 'Dates Confirmed', requestStatus: 'Scheduled', datesProposedBy: '' }
         : r
       ));
       setExpandedId(null);
@@ -548,18 +551,23 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   // Actions column shows for SEDs, admins, or an assigned SSE who has any pending action
   // (accept a dateless engagement, or confirm proposed/rescheduled dates on an active one).
-  const sseHasActionOn = (r: ICseRequest): boolean => {
-    if (!(r.requestedCse || '').toLowerCase().includes(userEmail)) return false;
+  // Does the current viewer have any date action pending on this row? Covers the SSE (accept a
+  // dateless engagement, or confirm dates the SE proposed) AND the SE (confirm dates the SSE proposed).
+  const viewerHasDateAction = (r: ICseRequest): boolean => {
+    const amSse = (r.requestedCse || '').toLowerCase().includes(userEmail);
+    const amSe  = (r.sePrimary  || '').toLowerCase().includes(userEmail);
+    if (!amSse && !amSe) return false;
     const realDates = (!r.remoteTbd && !!r.remoteStart) || (!r.onsiteTbd && !!r.onsiteStart);
-    // No real dates on an accepted row → Accept-to-start (there is nothing to confirm).
-    const accTbd  = r.requestStatus === 'Accepted' && !realDates;
-    // A confirm is only meaningful when actual dates were proposed.
-    const needConf = ['Accepted', 'Scheduled', 'In Progress'].indexOf(r.requestStatus) !== -1
-                     && (r.scheduleStatus === 'Dates Proposed' || r.scheduleStatus === 'Rescheduling')
-                     && realDates;
-    return accTbd || needConf;
+    // No real dates on an accepted row → SSE Accept-to-start (nothing to confirm).
+    if (amSse && r.requestStatus === 'Accepted' && !realDates) return true;
+    // A confirm is only meaningful when actual dates are proposed and awaiting the OTHER party.
+    const awaitingConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(r.requestStatus) !== -1
+                     && r.scheduleStatus === 'Dates Proposed' && realDates;
+    if (!awaitingConfirm) return false;
+    const proposedBySse = r.datesProposedBy === 'SSE';
+    return proposedBySse ? amSe : amSse; // SSE proposed → SE confirms; else SSE confirms
   };
-  const showActionsCol = isSED || isAdmin || visibleRequests.some(sseHasActionOn);
+  const showActionsCol = isSED || isAdmin || visibleRequests.some(viewerHasDateAction);
 
   const renderRow = (req: ICseRequest, i: number, hideReassign = false): JSX.Element => {
     const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
@@ -572,17 +580,28 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const isExpanded    = expandedId === req.id;
     const isCancelled   = req.requestStatus === 'Cancelled';
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
-    const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail) || isAssignedSse)
+    const isSePrimary     = req.sePrimary.toLowerCase().includes(userEmail);
+    const canEditDates  = (isAdmin || isSePrimary || isAssignedSse)
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
-    // SSE gets an action to (a) accept a dateless engagement, or (b) confirm dates proposed/rescheduled
-    // AT ANY point after SED acceptance — including when the SE adds/changes dates on an already-active engagement.
-    // Gate on hasRealDates (not the raw scheduleStatus) so a dishonest "Dates Proposed" with no actual
-    // date routes to Accept-to-start, and Confirm only shows when there is a real date to confirm.
+    // SSE gets an action to accept a dateless engagement (nothing to confirm) at any point after SED acceptance.
+    // Gate on hasRealDates (not raw status) so a dishonest "Dates Proposed" with no actual date routes here.
     const acceptTbd      = req.requestStatus === 'Accepted' && !hasRealDates;
-    const needsDateConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1
-                          && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling')
-                          && hasRealDates;
-    const showSseActions = (isAssignedSse || isAdmin) && (acceptTbd || needsDateConfirm);
+    // A confirm is meaningful only when real dates are proposed and awaiting the OTHER party's response.
+    const awaitingConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1
+                          && req.scheduleStatus === 'Dates Proposed' && hasRealDates;
+    // Reciprocal routing: whoever proposed last is NOT the one who confirms.
+    const proposedBySse  = req.datesProposedBy === 'SSE';
+    const sseConfirmTurn = awaitingConfirm && !proposedBySse;   // SE (or legacy) proposed → SSE confirms
+    const seConfirmTurn  = awaitingConfirm && proposedBySse;    // SSE proposed → SE confirms
+    // A declined proposal (Rescheduling) bounces the ball back to whoever can edit → re-propose, not confirm.
+    const showRepropose  = req.scheduleStatus === 'Rescheduling' && hasRealDates && canEditDates;
+    const showSseActions = (isAssignedSse || isAdmin) && (acceptTbd || sseConfirmTurn);
+    const showSeConfirm  = (isSePrimary || isAdmin) && seConfirmTurn;
+    // The Confirm/Decline/New-dates block is shared by whichever party is being asked to confirm.
+    const showConfirmBlock = (sseConfirmTurn && (isAssignedSse || isAdmin)) || showSeConfirm;
+    const proposerName   = seConfirmTurn
+      ? (sseName || 'the SSE')
+      : (parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || 'the SE');
     const colSpan       = 12 + (showActionsCol ? 1 : 0) + (isAdmin ? 1 : 0);
     const isStrat       = isStrategicReq(req);
     const purposeText   = req.engagementPurpose === 'Other' ? (req.engagementPurposeOther || 'Other') : (req.engagementPurpose || '');
@@ -799,15 +818,17 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               </div>
             )
           )}
-          {/* ── SSE action on an Accepted request (Charlie's turn) ── */}
-          {showSseActions && (
-            acceptTbd ? (
-              <button disabled={savingId === req.id} onClick={() => handleSseAccept(req.id!).catch(() => undefined)}
-                title="No dates were proposed — accept and start the engagement"
-                style={{ fontSize: 11, padding: '4px 12px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                {savingId === req.id ? '…' : '✓ Accept'}
-              </button>
-            ) : declineDatesId === req.id ? (
+          {/* ── SSE accepts a dateless engagement (nothing to confirm) ── */}
+          {showSseActions && acceptTbd && (
+            <button disabled={savingId === req.id} onClick={() => handleSseAccept(req.id!).catch(() => undefined)}
+              title="No dates were proposed — accept and start the engagement"
+              style={{ fontSize: 11, padding: '4px 12px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+              {savingId === req.id ? '…' : '✓ Accept'}
+            </button>
+          )}
+          {/* ── Reciprocal date confirmation — shown to whichever party the other one proposed to ── */}
+          {showConfirmBlock && (
+            declineDatesId === req.id ? (
               <div>
                 <input type="text" value={declineDatesNote} onChange={e => setDeclineDatesNote(e.target.value)} placeholder="Reason (optional)"
                   style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
@@ -819,18 +840,27 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
-                  style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✓ Confirm</button>
-                <button onClick={() => setDeclineDatesId(req.id!)}
-                  style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✕ Decline</button>
-                <button onClick={() => handleExpand(req)}
-                  style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✎ New dates</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 10, color: '#8a6000' }}>{proposerName} proposed dates — your confirm</span>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
+                    style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✓ Confirm</button>
+                  <button onClick={() => setDeclineDatesId(req.id!)}
+                    style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✕ Decline</button>
+                  <button onClick={() => handleExpand(req)}
+                    style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✎ New dates</button>
+                </div>
               </div>
             )
           )}
+          {/* ── Declined proposal — ball is back with the proposer to send new dates ── */}
+          {showRepropose && !showConfirmBlock && (
+            <button onClick={() => handleExpand(req)}
+              title="The other party declined these dates — propose new ones"
+              style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✎ Propose new dates</button>
+          )}
           {/* ── nothing to act on for this viewer/row ── */}
-          {!(req.requestStatus === 'Pending' && (isSED || isAdmin)) && !showSseActions && (
+          {!(req.requestStatus === 'Pending' && (isSED || isAdmin)) && !showSseActions && !showConfirmBlock && !showRepropose && (
             <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
           )}
         </td>}
@@ -995,7 +1025,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               {canEditDates && (
                 <button disabled={savingDates} onClick={() => handleSaveDates(req).catch(() => undefined)}
                   style={{ padding: '6px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingDates ? 0.6 : 1 }}>
-                  {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save (will flag as Rescheduling)' : 'Save Dates'}
+                  {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save — re-propose dates' : 'Save & Propose Dates'}
                 </button>
               )}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1041,9 +1071,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             {req.scheduleStatus !== 'TBD' && (
               <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
                 Current schedule status: <strong>{req.scheduleStatus}</strong>
-                {req.scheduleStatus === 'Dates Confirmed' && ' — saving new dates will flag this as Rescheduling and notify the SSE.'}
-                {req.scheduleStatus === 'Dates Proposed' && ' — awaiting SSE confirmation.'}
-                {req.scheduleStatus === 'Rescheduling' && ' — SSE declined the previous dates. Update and save to re-propose.'}
+                {req.scheduleStatus === 'Dates Confirmed' && ' — saving new dates re-proposes them for confirmation.'}
+                {req.scheduleStatus === 'Dates Proposed' && (req.datesProposedBy === 'SSE' ? ' — awaiting the SE\'s confirmation.' : ' — awaiting the SSE\'s confirmation.')}
+                {req.scheduleStatus === 'Rescheduling' && ' — the proposed dates were declined. Update and save to re-propose.'}
               </div>
             )}
             </div>
