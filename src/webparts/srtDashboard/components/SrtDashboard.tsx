@@ -879,7 +879,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {isExpanded && dateEdit && (
         <tr style={{ background: '#f8f5ff', borderBottom: '2px solid #6b2faf' }}>
           <td colSpan={colSpan} style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ maxWidth: 1180 }}>
+            {/* Single-column, fixed narrow width so the drawer never clips on a non-full-width page. */}
+            <div style={{ maxWidth: 780 }}>
             {/* ── Strategic Engagement review (competitive intel for the SSE) ── */}
             {isStrat && (
               <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #e0d8f0' }}>
@@ -935,7 +936,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 })()}
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Remote Support</div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 8, cursor: canEditDates ? 'pointer' : 'default' }}>
@@ -1008,7 +1009,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             </div>
 
             {/* Opportunity + Notes */}
-            <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Opportunity</div>
                 <textarea value={drawerOpportunity} onChange={e => setDrawerOpportunity(e.target.value)} rows={4}
