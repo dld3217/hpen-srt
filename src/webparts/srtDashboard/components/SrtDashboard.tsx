@@ -131,6 +131,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [expandedId, setExpandedId]             = useState<number | null>(null);
   const [dateEdit, setDateEdit]                 = useState<IDateEdit | null>(null);
   const [proposeAs, setProposeAs]               = useState<'SE' | 'SSE'>('SE');
+  const [saveDbg, setSaveDbg]                   = useState('');
   const [savingDates, setSavingDates]           = useState(false);
   const [declineDatesId, setDeclineDatesId]     = useState<number | null>(null);
   const [declineDatesNote, setDeclineDatesNote] = useState('');
@@ -343,6 +344,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const proposedBy = realIsAdmin
       ? proposeAs
       : ((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
+    // TEMP DIAGNOSTIC (remove once proposer bug resolved) — surface exactly what the save saw.
+    const dbg = `SAVE → wrote DatesProposedBy=${proposedBy}  |  realIsAdmin=${realIsAdmin}  |  proposeAs toggle=${proposeAs}  |  effective userEmail=${userEmail || '(none)'}  |  requestedCse="${req.requestedCse}"`;
+    setSaveDbg(dbg); console.log('[SRT date-save]', dbg);
     const newStatus: ScheduleStatus = 'Dates Proposed';
     try {
       await new CseRequestService(sp).updateDates(req.id!, { ...dateEdit, scheduleStatus: newStatus, datesProposedBy: proposedBy });
@@ -1109,6 +1113,15 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   return (
     <div style={{ fontFamily: 'inherit', minHeight: 400, width: '100%' }}>
+
+      {/* ── TEMP DIAGNOSTIC banner (remove once proposer bug resolved) ── */}
+      {saveDbg && (
+        <div style={{ background: '#fff4ce', color: '#5c4400', border: '1px solid #d9b400', padding: '8px 14px', fontSize: 12, fontFamily: 'Consolas, monospace', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>🔎 {saveDbg}</span>
+          <button type="button" onClick={() => setSaveDbg('')}
+            style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 10px', background: '#fff', border: '1px solid #d9b400', borderRadius: 3, cursor: 'pointer' }}>Dismiss</button>
+        </div>
+      )}
 
       {/* ── Admin-only TEST bar: view the dashboard as another user ── */}
       {realIsAdmin && (
