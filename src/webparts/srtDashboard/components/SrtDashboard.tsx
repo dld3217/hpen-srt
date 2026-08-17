@@ -847,15 +847,15 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <span style={{ fontSize: 10, color: '#8a6000' }}>{proposerName} proposed dates — your confirm</span>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
-                    style={{ fontSize: 11, padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✓ Confirm</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: 150 }}>
+                <span style={{ fontSize: 10, color: '#8a6000', lineHeight: 1.2 }}>↩ {proposerName} proposed — your confirm</span>
+                <button disabled={savingDates} onClick={() => handleConfirmDates(req.id!).catch(() => undefined)}
+                  style={{ width: '100%', fontSize: 11, padding: '4px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✓ Confirm</button>
+                <div style={{ display: 'flex', gap: 4 }}>
                   <button onClick={() => setDeclineDatesId(req.id!)}
-                    style={{ fontSize: 11, padding: '4px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✕ Decline</button>
+                    style={{ flex: 1, fontSize: 11, padding: '4px 0', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✕ Decline</button>
                   <button onClick={() => handleExpand(req)}
-                    style={{ fontSize: 11, padding: '4px 10px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✎ New dates</button>
+                    style={{ flex: 1, fontSize: 11, padding: '4px 0', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>✎ New</button>
                 </div>
               </div>
             )
@@ -1091,6 +1091,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             {req.scheduleStatus !== 'TBD' && (
               <div style={{ marginTop: 8, fontSize: 11, color: '#888' }}>
                 Current schedule status: <strong>{req.scheduleStatus}</strong>
+                {' · Proposed by: '}<strong>{req.datesProposedBy || 'SE (default)'}</strong>
                 {req.scheduleStatus === 'Dates Confirmed' && ' — saving new dates re-proposes them for confirmation.'}
                 {req.scheduleStatus === 'Dates Proposed' && (req.datesProposedBy === 'SSE' ? ' — awaiting the SE\'s confirmation.' : ' — awaiting the SSE\'s confirmation.')}
                 {req.scheduleStatus === 'Rescheduling' && ' — the proposed dates were declined. Update and save to re-propose.'}
