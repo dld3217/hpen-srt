@@ -130,6 +130,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [showOnsitePanel, setShowOnsitePanel]   = useState(true);
   const [expandedId, setExpandedId]             = useState<number | null>(null);
   const [dateEdit, setDateEdit]                 = useState<IDateEdit | null>(null);
+  const [proposeAs, setProposeAs]               = useState<'SE' | 'SSE'>('SE');
   const [savingDates, setSavingDates]           = useState(false);
   const [declineDatesId, setDeclineDatesId]     = useState<number | null>(null);
   const [declineDatesNote, setDeclineDatesNote] = useState('');
@@ -314,6 +315,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       });
       setDrawerOpportunity(req.opportunity || '');
       setDrawerNotes(req.notes || '');
+      // Default the proposer to the effective role; admins can override before saving.
+      setProposeAs((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
       setDeclineDatesId(null);
       setDeclineDatesNote('');
     }
@@ -334,8 +337,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (!dateEdit) return;
     setSavingDates(true);
     // Any date save is a fresh proposal awaiting the OTHER party's confirm. Stamp who proposed
-    // (the assigned SSE → 'SSE', otherwise the SE) so the confirm routes to the counterpart.
-    const proposedBy = (req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE';
+    // so the confirm routes to the counterpart. End-users are inferred from their identity; an
+    // admin (who may act on behalf, or be testing via View-as) uses the explicit "Proposing as"
+    // choice — identity inference is unreliable when one person wears multiple hats.
+    const proposedBy = realIsAdmin
+      ? proposeAs
+      : ((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
     const newStatus: ScheduleStatus = 'Dates Proposed';
     try {
       await new CseRequestService(sp).updateDates(req.id!, { ...dateEdit, scheduleStatus: newStatus, datesProposedBy: proposedBy });
@@ -1027,6 +1034,19 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   style={{ padding: '6px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingDates ? 0.6 : 1 }}>
                   {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save — re-propose dates' : 'Save & Propose Dates'}
                 </button>
+              )}
+              {canEditDates && realIsAdmin && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#605e5c' }}>
+                  Proposing as:
+                  {(['SE', 'SSE'] as const).map(role => (
+                    <button key={role} type="button" onClick={() => setProposeAs(role)}
+                      title={role === 'SE' ? 'Dates come from the SE — the SSE will confirm' : 'Dates come from the SSE — the SE will confirm'}
+                      style={{ padding: '3px 9px', fontSize: 11, fontWeight: 600, borderRadius: 3, cursor: 'pointer',
+                        border: `1px solid ${proposeAs === role ? '#6b2faf' : '#ccc'}`,
+                        background: proposeAs === role ? '#6b2faf' : '#fff',
+                        color: proposeAs === role ? '#fff' : '#605e5c' }}>{role}</button>
+                  ))}
+                </span>
               )}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                 {canCancel(req) && cancelId !== req.id && (
