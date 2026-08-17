@@ -489,6 +489,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       errs.push('For each competitor row, pick Integrate or Displace.');
     if (formData.landscape.some(r => r.disposition === 'Integrate' && !(r.detail || '').trim()))
       errs.push('For each Integrate row, add the integration detail (how they coexist).');
+    if (formData.landscape.some(r => ((r.vendor || '').trim() || (r.product || '').trim() || (r.version || '').trim()) && !r.solutionCode))
+      errs.push('Each Solution Landscape row with a vendor or product needs a Solution selected — rows without one are not captured.');
     if (formData.desiredOutcomes.indexOf(OUTCOME_OBJECTION) !== -1 && !formData.objectionText.trim())
       errs.push('List the specific objection(s) to overcome.');
     if ((formData.csePriority === 'High' || formData.csePriority === 'Critical') && !formData.csePriorityReason.trim())
