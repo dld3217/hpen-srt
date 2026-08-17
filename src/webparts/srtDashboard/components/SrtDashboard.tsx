@@ -131,7 +131,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [expandedId, setExpandedId]             = useState<number | null>(null);
   const [dateEdit, setDateEdit]                 = useState<IDateEdit | null>(null);
   const [proposeAs, setProposeAs]               = useState<'SE' | 'SSE'>('SE');
-  const [saveDbg, setSaveDbg]                   = useState('');
   const [savingDates, setSavingDates]           = useState(false);
   const [declineDatesId, setDeclineDatesId]     = useState<number | null>(null);
   const [declineDatesNote, setDeclineDatesNote] = useState('');
@@ -344,9 +343,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const proposedBy = realIsAdmin
       ? proposeAs
       : ((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
-    // TEMP DIAGNOSTIC (remove once proposer bug resolved) — surface exactly what the save saw.
-    const dbg = `SAVE → wrote DatesProposedBy=${proposedBy}  |  realIsAdmin=${realIsAdmin}  |  proposeAs toggle=${proposeAs}  |  effective userEmail=${userEmail || '(none)'}  |  requestedCse="${req.requestedCse}"`;
-    setSaveDbg(dbg); console.log('[SRT date-save]', dbg);
     const newStatus: ScheduleStatus = 'Dates Proposed';
     try {
       await new CseRequestService(sp).updateDates(req.id!, { ...dateEdit, scheduleStatus: newStatus, datesProposedBy: proposedBy });
@@ -1033,6 +1029,27 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               </button>
             </div>
 
+            {/* Admin-only: who is proposing these dates? (the other party confirms) */}
+            {canEditDates && realIsAdmin && (
+              <div style={{ marginTop: 16, padding: '10px 14px', background: '#f5f0ff', border: '2px solid #6b2faf', borderRadius: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', marginBottom: 8 }}>
+                  🎯 Proposing these dates as <span style={{ fontWeight: 400 }}>(admin — the OTHER party is asked to confirm)</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {([['SE', 'SE proposing', 'SSE will confirm'], ['SSE', 'SSE proposing', 'SE will confirm']] as const).map(([role, label, sub]) => (
+                    <button key={role} type="button" onClick={() => setProposeAs(role)}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: 4, cursor: 'pointer', textAlign: 'left',
+                        border: `2px solid ${proposeAs === role ? '#6b2faf' : '#ccc'}`,
+                        background: proposeAs === role ? '#6b2faf' : '#fff',
+                        color: proposeAs === role ? '#fff' : '#605e5c' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>{proposeAs === role ? '● ' : '○ '}{label}</div>
+                      <div style={{ fontSize: 10, opacity: 0.85, marginTop: 1 }}>{sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Action bar */}
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderTop: '1px solid #e0d8f0', paddingTop: 12 }}>
               {canEditDates && (
@@ -1040,19 +1057,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   style={{ padding: '6px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingDates ? 0.6 : 1 }}>
                   {savingDates ? 'Saving…' : req.scheduleStatus === 'Dates Confirmed' ? 'Save — re-propose dates' : 'Save & Propose Dates'}
                 </button>
-              )}
-              {canEditDates && realIsAdmin && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#605e5c' }}>
-                  Proposing as:
-                  {(['SE', 'SSE'] as const).map(role => (
-                    <button key={role} type="button" onClick={() => setProposeAs(role)}
-                      title={role === 'SE' ? 'Dates come from the SE — the SSE will confirm' : 'Dates come from the SSE — the SE will confirm'}
-                      style={{ padding: '3px 9px', fontSize: 11, fontWeight: 600, borderRadius: 3, cursor: 'pointer',
-                        border: `1px solid ${proposeAs === role ? '#6b2faf' : '#ccc'}`,
-                        background: proposeAs === role ? '#6b2faf' : '#fff',
-                        color: proposeAs === role ? '#fff' : '#605e5c' }}>{role}</button>
-                  ))}
-                </span>
               )}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
                 {canCancel(req) && cancelId !== req.id && (
@@ -1113,15 +1117,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   return (
     <div style={{ fontFamily: 'inherit', minHeight: 400, width: '100%' }}>
-
-      {/* ── TEMP DIAGNOSTIC banner (remove once proposer bug resolved) ── */}
-      {saveDbg && (
-        <div style={{ background: '#fff4ce', color: '#5c4400', border: '1px solid #d9b400', padding: '8px 14px', fontSize: 12, fontFamily: 'Consolas, monospace', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span>🔎 {saveDbg}</span>
-          <button type="button" onClick={() => setSaveDbg('')}
-            style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 10px', background: '#fff', border: '1px solid #d9b400', borderRadius: 3, cursor: 'pointer' }}>Dismiss</button>
-        </div>
-      )}
 
       {/* ── Admin-only TEST bar: view the dashboard as another user ── */}
       {realIsAdmin && (
