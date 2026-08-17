@@ -803,25 +803,27 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', width: 150 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: 104 }}>
                 <button disabled={savingId === req.id} onClick={() => handleAccept(req.id!)}
-                  style={{ fontSize: 11, padding: '4px 6px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                  style={{ width: '100%', fontSize: 11, padding: '4px 0', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
                   {savingId === req.id ? '…' : '✓ Accept'}
                 </button>
                 {!hideReassign && (
                   <button onClick={() => { setReassignId(req.id!); setReassignSse(''); }}
-                    style={{ fontSize: 11, padding: '4px 6px', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    style={{ width: '100%', fontSize: 11, padding: '4px 0', background: '#eff6fc', color: '#0078d4', border: '1px solid #0078d4', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
                     ↔ Reassign
                   </button>
                 )}
-                <button onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}
-                  style={{ fontSize: 11, padding: '4px 6px', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                  ? Info
-                </button>
-                <button onClick={() => { setDecliningId(req.id!); setDeclineNote(''); }}
-                  style={{ fontSize: 11, padding: '4px 6px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
-                  ✕ Decline
-                </button>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  <button onClick={() => { setNeedsInfoId(req.id!); setNeedsInfoNote(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '4px 0', background: '#f0e6ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    ? Info
+                  </button>
+                  <button onClick={() => { setDecliningId(req.id!); setDeclineNote(''); }}
+                    style={{ flex: 1, fontSize: 11, padding: '4px 0', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                    ✕ Decline
+                  </button>
+                </div>
               </div>
             )
           )}
