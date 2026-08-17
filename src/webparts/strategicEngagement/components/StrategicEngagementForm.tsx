@@ -511,7 +511,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       const focusCodes = Array.from(new Set(rows.map(r => r.solutionCode).filter(Boolean)));
       const wantRemote = formData.supportType === 'Remote' || formData.supportType === 'Both';
       const wantOnsite = formData.supportType === 'On-Site' || formData.supportType === 'Both';
-      const hasFirmDates = (wantRemote && !formData.remoteTbd) || (wantOnsite && !formData.onsiteTbd);
+      // "Dates Proposed" requires an actual start date, not just the TBD toggle being off —
+      // otherwise the tracker shows a proposed schedule with no dates and prompts the SSE to confirm nothing.
+      const hasFirmDates = (wantRemote && !formData.remoteTbd && !!formData.remoteStart)
+                        || (wantOnsite && !formData.onsiteTbd && !!formData.onsiteStart);
       const schedStatus = hasFirmDates ? 'Dates Proposed' as const : 'TBD' as const;
 
       const svc = new CseRequestService(sp);

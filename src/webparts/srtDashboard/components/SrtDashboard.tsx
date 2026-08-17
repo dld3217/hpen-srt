@@ -550,9 +550,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   // (accept a dateless engagement, or confirm proposed/rescheduled dates on an active one).
   const sseHasActionOn = (r: ICseRequest): boolean => {
     if (!(r.requestedCse || '').toLowerCase().includes(userEmail)) return false;
-    const accTbd  = r.requestStatus === 'Accepted' && r.scheduleStatus === 'TBD';
+    const realDates = (!r.remoteTbd && !!r.remoteStart) || (!r.onsiteTbd && !!r.onsiteStart);
+    // No real dates on an accepted row → Accept-to-start (there is nothing to confirm).
+    const accTbd  = r.requestStatus === 'Accepted' && !realDates;
+    // A confirm is only meaningful when actual dates were proposed.
     const needConf = ['Accepted', 'Scheduled', 'In Progress'].indexOf(r.requestStatus) !== -1
-                     && (r.scheduleStatus === 'Dates Proposed' || r.scheduleStatus === 'Rescheduling');
+                     && (r.scheduleStatus === 'Dates Proposed' || r.scheduleStatus === 'Rescheduling')
+                     && realDates;
     return accTbd || needConf;
   };
   const showActionsCol = isSED || isAdmin || visibleRequests.some(sseHasActionOn);
@@ -561,7 +565,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
     // A "Dates Proposed/Confirmed" flag is dishonest if no actual date was entered — show TBD until there is one.
     const hasRealDates  = (!req.remoteTbd && !!req.remoteStart) || (!req.onsiteTbd && !!req.onsiteStart);
-    const effSchedStatus: ScheduleStatus = (!hasRealDates && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Dates Confirmed')) ? 'TBD' : req.scheduleStatus;
+    const effSchedStatus: ScheduleStatus = (!hasRealDates && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Dates Confirmed' || req.scheduleStatus === 'Rescheduling')) ? 'TBD' : req.scheduleStatus;
     const schedStyle    = SCHEDULE_STATUS_STYLE[effSchedStatus] || SCHEDULE_STATUS_STYLE.TBD;
     const tempStyle     = CUST_TEMP_STYLE[req.custTemp]    || CUST_TEMP_STYLE.Normal;
     const sseName       = parseSseName(req.requestedCse.includes('/') ? req.requestedCse.split('/')[0].trim() : req.requestedCse);
@@ -570,12 +574,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const isAssignedSse   = req.requestedCse?.toLowerCase().includes(userEmail);
     const canEditDates  = (isAdmin || req.sePrimary.toLowerCase().includes(userEmail) || isAssignedSse)
                           && !['Declined', 'Complete', 'Cancelled'].includes(req.requestStatus);
-    const noDates        = req.scheduleStatus === 'TBD';
     // SSE gets an action to (a) accept a dateless engagement, or (b) confirm dates proposed/rescheduled
     // AT ANY point after SED acceptance — including when the SE adds/changes dates on an already-active engagement.
-    const acceptTbd      = req.requestStatus === 'Accepted' && noDates;
+    // Gate on hasRealDates (not the raw scheduleStatus) so a dishonest "Dates Proposed" with no actual
+    // date routes to Accept-to-start, and Confirm only shows when there is a real date to confirm.
+    const acceptTbd      = req.requestStatus === 'Accepted' && !hasRealDates;
     const needsDateConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1
-                          && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling');
+                          && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Rescheduling')
+                          && hasRealDates;
     const showSseActions = (isAssignedSse || isAdmin) && (acceptTbd || needsDateConfirm);
     const colSpan       = 12 + (showActionsCol ? 1 : 0) + (isAdmin ? 1 : 0);
     const isStrat       = isStrategicReq(req);
