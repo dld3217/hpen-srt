@@ -2,7 +2,7 @@ import { SPFI } from '@pnp/sp';
 import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
-import { ICseRequest, CseRequestStatus, ScheduleStatus, CustTemp } from '../models/ICseRequest';
+import { ICseRequest, CseRequestStatus, ScheduleStatus, CustTemp, ISseCommitment } from '../models/ICseRequest';
 
 const LIST_NAME = 'CSERequests';
 
@@ -247,5 +247,36 @@ export class CseRequestService {
       Opportunity: opportunity,
       Notes: notes,
     });
+  }
+
+  // Confirmed, upcoming on-site + remote busy blocks — for SSE availability / double-book avoidance.
+  // Pass an sseEmail to scope to one SSE; omit for all SSEs (standalone availability view).
+  async getSseCommitments(sseEmail?: string): Promise<ISseCommitment[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items: Record<string, any>[] = await this.sp.web.lists.getByTitle(LIST_NAME).items
+      .select(...SP_SELECT).top(4000)();
+    const reqs = items.map(mapToRequest);
+    const now = new Date();
+    const pad = (n: number): string => (n < 10 ? '0' + n : '' + n);
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const email = (sseEmail || '').toLowerCase();
+    const out: ISseCommitment[] = [];
+    for (const r of reqs) {
+      if (r.scheduleStatus !== 'Dates Confirmed') continue;
+      if (['Declined', 'Cancelled', 'Complete'].indexOf(r.requestStatus) !== -1) continue;
+      if (email && !(r.requestedCse || '').toLowerCase().includes(email)) continue;
+      const sseName = (r.requestedCse.split('/')[0] || '').trim() || r.requestedCse;
+      const sseEmailVal = (r.requestedCse.split('/')[1] || '').trim();
+      if (!r.remoteTbd && r.remoteStart) {
+        const end = r.remoteEnd || r.remoteStart;
+        if (end.substring(0, 10) >= todayStr) out.push({ start: r.remoteStart, end, type: 'Remote', location: '', sseEmail: sseEmailVal, sseName, requestId: r.id });
+      }
+      if (!r.onsiteTbd && r.onsiteStart) {
+        const end = r.onsiteEnd || r.onsiteStart;
+        if (end.substring(0, 10) >= todayStr) out.push({ start: r.onsiteStart, end, type: 'On-site', location: r.onsiteDestination || '', sseEmail: sseEmailVal, sseName, requestId: r.id });
+      }
+    }
+    out.sort((a, b) => (a.start.substring(0, 10) < b.start.substring(0, 10) ? -1 : 1));
+    return out;
   }
 }

@@ -1,4 +1,15 @@
 export type CseRequestStatus = 'Pending' | 'Accepted' | 'Scheduled' | 'In Progress' | 'Parked' | 'Complete' | 'Declined' | 'Needs Info' | 'Cancelled';
+
+// A single committed (Dates Confirmed) busy block for an SSE — powers availability views so SEs don't double-book.
+export interface ISseCommitment {
+  start: string;                 // ISO date
+  end: string;                   // ISO date (>= start)
+  type: 'On-site' | 'Remote';
+  location: string;              // on-site destination (blank for remote)
+  sseEmail: string;
+  sseName: string;
+  requestId?: number;
+}
 export type ScheduleStatus = 'TBD' | 'Dates Proposed' | 'Dates Confirmed' | 'Rescheduling';
 export type CustTemp = 'Low' | 'Normal' | 'High' | 'Critical';
 

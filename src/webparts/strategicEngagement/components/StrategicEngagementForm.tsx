@@ -7,6 +7,7 @@ import { MSGraphClientV3 } from '@microsoft/sp-http';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { ConfigService, BURegionMap, IBUConfig, IRegionConfig } from '../../../services/ConfigService';
 import { CseRequestService } from '../../../services/CseRequestService';
+import { ISseCommitment } from '../../../models/ICseRequest';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import {
   ENGAGEMENT_PURPOSES, DESIRED_OUTCOMES, OUTCOME_OBJECTION, OUTCOME_OTHER, IEnvironmentRow,
@@ -384,9 +385,24 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isAdmin, setIsAdmin]         = useState(false);
   const [demoIdx, setDemoIdx]         = useState(0);
+  const [commitments, setCommitments] = useState<ISseCommitment[]>([]);
+  const [commitLoading, setCommitLoading] = useState(false);
 
   const userEmail       = context.pageContext.user.email;
   const userDisplayName = context.pageContext.user.displayName || userEmail;
+
+  // Load the selected SSE's confirmed upcoming commitments so the SE can avoid double-booking.
+  const sseEmail = formData.requestedSse.includes('/') ? formData.requestedSse.split('/')[1].trim() : '';
+  useEffect(() => {
+    if (!sseEmail) { setCommitments([]); return; }
+    let cancelled = false;
+    setCommitLoading(true);
+    new CseRequestService(sp).getSseCommitments(sseEmail)
+      .then(c => { if (!cancelled) setCommitments(c); })
+      .catch(() => { if (!cancelled) setCommitments([]); })
+      .finally(() => { if (!cancelled) setCommitLoading(false); });
+    return () => { cancelled = true; };
+  }, [sseEmail]);
 
   useEffect(() => {
     const configSvc = new ConfigService(sp);
@@ -563,6 +579,27 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   const regionKeys = formData.hpenBusinessUnit ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort() : [];
   const showRemote = formData.supportType === 'Remote' || formData.supportType === 'Both';
   const showOnsite = formData.supportType === 'On-Site' || formData.supportType === 'Both';
+
+  // ── SSE availability helpers ──
+  const dstr = (iso: string): string => (iso || '').substring(0, 10);
+  const fmtD = (iso: string): string => {
+    const p = dstr(iso); if (!p) return '';
+    const [y, m, d] = p.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const fmtRange = (a: string, b: string): string => {
+    const s = fmtD(a), e = fmtD(b);
+    return e && e !== s ? `${s} – ${e}` : s;
+  };
+  const rangesOverlap = (aS: string, aE: string, bS: string, bE: string): boolean => aS <= bE && bS <= aE;
+  // The dates the SE is actively proposing on this form (only firm, non-TBD blocks).
+  const proposedBlocks: Array<{ s: string; e: string }> = [];
+  if (showRemote && !formData.remoteTbd && formData.remoteStart) proposedBlocks.push({ s: dstr(formData.remoteStart), e: dstr(formData.remoteEnd || formData.remoteStart) });
+  if (showOnsite && !formData.onsiteTbd && formData.onsiteStart) proposedBlocks.push({ s: dstr(formData.onsiteStart), e: dstr(formData.onsiteEnd || formData.onsiteStart) });
+  const commitConflicts = (c: ISseCommitment): boolean =>
+    proposedBlocks.some(p => rangesOverlap(p.s, p.e, dstr(c.start), dstr(c.end)));
+  const anyConflict = commitments.some(commitConflicts);
+  const sseShortName = formData.requestedSse.includes('/') ? formData.requestedSse.split('/')[0].trim() : '';
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -763,6 +800,43 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       {/* Time Coordination */}
       <div style={SECTION}>
         <SectionHeader title="Time Coordination" />
+
+        {/* ── SSE availability: the selected SSE's confirmed upcoming commitments (avoid double-booking) ── */}
+        {sseEmail && (
+          <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6,
+            background: anyConflict ? '#fdf2f3' : '#f3f9f4',
+            border: `1px solid ${anyConflict ? '#d68a90' : '#bcdcc4'}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#3b3a39', marginBottom: 6 }}>
+              🗓️ {sseShortName || 'SSE'}’s upcoming commitments
+              {commitLoading && <span style={{ fontWeight: 400, color: '#888' }}> — checking…</span>}
+            </div>
+            {!commitLoading && commitments.length === 0 && (
+              <div style={{ fontSize: 12, color: '#605e5c' }}>No confirmed on-site or remote commitments coming up. 👍</div>
+            )}
+            {!commitLoading && commitments.length > 0 && (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {commitments.map((c, i) => {
+                    const clash = commitConflicts(c);
+                    return (
+                      <div key={i} style={{ fontSize: 12, color: clash ? '#a4262c' : '#323130', fontWeight: clash ? 700 : 400 }}>
+                        {c.type === 'On-site' ? '🏢' : '💻'} <strong>{fmtRange(c.start, c.end)}</strong> · {c.type}
+                        {c.location ? ` · ${c.location}` : ''}
+                        {clash && ' · ⚠️ overlaps your proposed dates'}
+                      </div>
+                    );
+                  })}
+                </div>
+                {anyConflict && (
+                  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#a4262c' }}>
+                    ⚠️ Your proposed dates overlap {sseShortName || 'the SSE'}’s existing commitment(s). Pick different dates or confirm this is intended.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <div style={FIELD_ROW}>
           <label style={LABEL_STYLE}>Format</label>
           <div style={{ display: 'flex', gap: 6 }}>
