@@ -91,6 +91,7 @@ const TD: React.CSSProperties = {
 // ── Header nav targets (same site collection) ─────────────────────────────────
 const POC_HOME_URL   = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/Home.aspx';
 const INSIGHTS_URL   = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SSE-Demand-Insights.aspx';
+const AVAILABILITY_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SSE-Availability.aspx';
 // Front-door page ("Request SSE Support"); ?form=strategic opens straight to the Strategic Engagement form.
 const FRONT_DOOR_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/Strategic-Engagement-Request.aspx';
 const HDR_GREEN: React.CSSProperties = { padding: '5px 14px', background: HPE_GREEN, border: 'none', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' };
@@ -1182,6 +1183,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           {/* Navigation (outline) */}
           <a href={POC_HOME_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>POC Manager</a>
           <a href={INSIGHTS_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>📊 SSE Demand Insights</a>
+          <a href={AVAILABILITY_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>🗓️ SSE Availability</a>
           {isAdmin && <button onClick={() => setShowAdmin(true)} style={HDR_OUTLINE}>Admin</button>}
           <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</span>
         </div>
