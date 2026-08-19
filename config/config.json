@@ -33,6 +33,14 @@
           "manifest": "./src/webparts/srtInsights/SrtInsightsWebPart.manifest.json"
         }
       ]
+    },
+    "sse-availability-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/sseAvailability/SseAvailabilityWebPart.js",
+          "manifest": "./src/webparts/sseAvailability/SseAvailabilityWebPart.manifest.json"
+        }
+      ]
     }
   },
   "externals": {},

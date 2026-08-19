@@ -1,0 +1,24 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx/client-side-web-part-manifest.schema.json",
+  "id": "7e1b9a4c-3d52-4a6f-b8c1-2f9e0d5a7361",
+  "alias": "SseAvailabilityWebPart",
+  "componentType": "WebPart",
+
+  "version": "*",
+  "manifestVersion": 2,
+
+  "requiresCustomScript": false,
+  "supportedHosts": ["SharePointWebPart", "SharePointFullPage"],
+  "supportsThemeVariants": true,
+
+  "preconfiguredEntries": [{
+    "groupId": "5c03119e-3074-46fd-976b-c60198311f70",
+    "group": { "default": "Advanced" },
+    "title": { "default": "SSE Availability" },
+    "description": { "default": "Upcoming confirmed on-site and remote commitments per SSE — so SEs can schedule around them" },
+    "officeFabricIconFontName": "Calendar",
+    "properties": {
+      "description": "SSE Availability"
+    }
+  }]
+}
