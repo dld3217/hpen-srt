@@ -7,6 +7,7 @@ import { MSGraphClientV3 } from '@microsoft/sp-http';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { ConfigService, BURegionMap, IBUConfig, IRegionConfig } from '../../../services/ConfigService';
 import { CseRequestService } from '../../../services/CseRequestService';
+import { ContactDirectoryService, IContact, SPECIALIST_SLOTS, GENERALIST_CATEGORY, territoryTier } from '../../../services/ContactDirectoryService';
 import { ISseCommitment } from '../../../models/ICseRequest';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import {
@@ -48,6 +49,7 @@ interface IStrategicFormData {
   csePriority: string;
   csePriorityReason: string;
   opportunityAmount: number;
+  additionalResources: string;
 }
 
 const EMPTY_FORM: IStrategicFormData = {
@@ -57,7 +59,7 @@ const EMPTY_FORM: IStrategicFormData = {
   supportType: '', remoteTbd: true, onsiteTbd: true,
   remoteStart: '', remoteEnd: '', remoteDuration: '1-hour meeting',
   onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
-  csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0,
+  csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0, additionalResources: '',
 };
 
 const VERSION = APP_VERSION;
@@ -387,6 +389,11 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   const [demoIdx, setDemoIdx]         = useState(0);
   const [commitments, setCommitments] = useState<ISseCommitment[]>([]);
   const [commitLoading, setCommitLoading] = useState(false);
+  const [contacts, setContacts] = useState<IContact[]>([]);
+  const [showResourceDrawer, setShowResourceDrawer] = useState(false);
+  const [openSpec, setOpenSpec] = useState<Set<string>>(new Set());
+
+  useEffect(() => { new ContactDirectoryService(context).getAll().then(setContacts).catch(() => setContacts([])); }, []);
 
   const userEmail       = context.pageContext.user.email;
   const userDisplayName = context.pageContext.user.displayName || userEmail;
@@ -542,6 +549,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         scheduleStatus: schedStatus,
         datesProposedBy: hasFirmDates ? 'SE' : '', // SE proposes at submit; SSE confirms
         requestedCse: formData.requestedSse,
+        additionalResources: formData.additionalResources,
         sseManagerEmail: '',
         cseDescription: formData.notes,
         csePriority: formData.csePriority || 'Medium',
@@ -600,6 +608,42 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
     proposedBlocks.some(p => rangesOverlap(p.s, p.e, dstr(c.start), dstr(c.end)));
   const anyConflict = commitments.some(commitConflicts);
   const sseShortName = formData.requestedSse.includes('/') ? formData.requestedSse.split('/')[0].trim() : '';
+
+  // ── Territory-scoped Contact Directory selection ──
+  const staffBU = formData.hpenBusinessUnit;
+  const staffRegion = formData.buRegion;
+  const solCats = new Set(formData.landscape.map(r => solutions.find(s => s.code === r.solutionCode)?.category).filter(Boolean) as string[]);
+  const resToArr = (v: string): string[] => (v || '').split(';').map(s => s.trim()).filter(Boolean);
+  const territoryMatches = (category: string): IContact[] =>
+    contacts.filter(c => (c.category || '') === category && territoryTier(c.geography, staffBU, staffRegion) > 0)
+      .sort((a, b) => territoryTier(a.geography, staffBU, staffRegion) - territoryTier(b.geography, staffBU, staffRegion));
+  const resPicks = resToArr(formData.additionalResources);
+  const isResPicked = (c: IContact): boolean => resPicks.some(x => x.toLowerCase() === `${c.name} / ${c.email}`.toLowerCase());
+  const toggleRes = (c: IContact): void => {
+    const val = `${c.name} / ${c.email}`;
+    const next = isResPicked(c) ? resPicks.filter(x => x.toLowerCase() !== val.toLowerCase()) : [...resPicks, val];
+    set('additionalResources', next.join('; '));
+  };
+  const addResRaw = (v: string): void => { if (v.indexOf('/') !== -1 && !resPicks.some(x => x.toLowerCase() === v.toLowerCase())) set('additionalResources', [...resPicks, v].join('; ')); };
+  const removeRes = (v: string): void => set('additionalResources', resPicks.filter(x => x.toLowerCase() !== v.toLowerCase()).join('; '));
+  // One directory card: name (click to select) + phone (click to call).
+  const contactCard = (c: IContact, picked: boolean, onPick: () => void): JSX.Element => {
+    const tier = territoryTier(c.geography, staffBU, staffRegion);
+    return (
+      <div key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 10px', borderRadius: 4,
+        border: `1px solid ${picked ? HPE_GREEN : '#ccc'}`, background: picked ? '#e8f5e9' : '#fff', color: picked ? '#1b5e20' : '#323130' }}>
+        <span onClick={onPick} style={{ cursor: 'pointer' }}>
+          {picked ? '✓ ' : ''}{(c.name || '').replace(/\s*\(.*\)$/, '').trim()}
+          {tier === 1 && <span style={{ fontSize: 9, color: '#107c10', marginLeft: 4 }}>◆ {staffRegion}</span>}
+          {tier === 2 && <span style={{ fontSize: 9, color: '#888', marginLeft: 4 }}>ENT-wide</span>}
+        </span>
+        {c.phone && (
+          <a href={`tel:${(c.phone || '').replace(/[^\d+]/g, '')}`} title={`Call ${(c.name || '').split(',')[0].trim()} — check availability`} onClick={e => e.stopPropagation()}
+            style={{ fontSize: 11, color: '#0078d4', textDecoration: 'none', whiteSpace: 'nowrap', borderLeft: '1px solid #ddd', paddingLeft: 6 }}>📞 {c.phone}</a>
+        )}
+      </div>
+    );
+  };
 
   if (loading) return <Spinner size={SpinnerSize.large} label="Loading…" style={{ marginTop: 32 }} />;
 
@@ -704,6 +748,68 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         </div>
         <PeoplePickerField label="Primary SE" required value={formData.primarySe} onChange={v => set('primarySe', v)} searchUsers={handleSearchUsers} />
         <PeoplePickerField label="Requested SSE" required value={formData.requestedSse} onChange={v => set('requestedSse', v)} searchUsers={handleSearchUsers} />
+        {/* Territory-scoped Strategic SSE cards */}
+        {(() => {
+          const sseCards = territoryMatches(GENERALIST_CATEGORY);
+          return sseCards.length > 0 ? (
+            <div style={{ margin: '2px 0 8px', paddingLeft: 2 }}>
+              <div style={{ fontSize: 11, color: '#605e5c', marginBottom: 4 }}>SSEs in your territory:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {sseCards.map(c => contactCard(c, !!c.email && formData.requestedSse.toLowerCase().includes(c.email.toLowerCase()), () => set('requestedSse', `${c.name} / ${c.email}`)))}
+              </div>
+            </div>
+          ) : null;
+        })()}
+        {/* Suggest additional resources — optional specialist drawer */}
+        <div style={{ marginTop: 4 }}>
+          <button type="button" onClick={() => setShowResourceDrawer(v => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#0078d4', padding: '4px 0', fontWeight: 600 }}>
+            {showResourceDrawer ? '− Hide additional resources' : `➕ Suggest additional resources${resPicks.length ? ` (${resPicks.length})` : ''}`}
+          </button>
+          {showResourceDrawer && (
+            <div style={{ border: '1px solid #e0d8f0', borderRadius: 6, padding: '10px 12px', marginTop: 4, background: '#faf9ff' }}>
+              <div style={{ fontSize: 11, color: '#605e5c', marginBottom: 8 }}>Optional — pull a specialist into this engagement. Territory-scoped; ✨ suggested by your Solution Landscape.</div>
+              {SPECIALIST_SLOTS.map(slot => {
+                const matches = territoryMatches(slot.category);
+                const suggested = slot.solutionCategories.some(c => solCats.has(c));
+                const open = openSpec.has(slot.key);
+                return (
+                  <div key={slot.key} style={{ marginBottom: 6 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={open} onChange={e => setOpenSpec(prev => { const n = new Set(prev); if (e.target.checked) n.add(slot.key); else n.delete(slot.key); return n; })} style={{ accentColor: HPE_GREEN, width: 13, height: 13 }} />
+                      <span style={{ fontWeight: (open || suggested) ? 600 : 400, color: suggested ? '#13294B' : '#605e5c' }}>{slot.label}</span>
+                      {suggested && <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: HPE_GREEN, borderRadius: 3, padding: '1px 5px' }}>suggested</span>}
+                      {!open && matches.length > 0 && <span style={{ fontSize: 11, color: '#107c10' }}>· {matches.length} in your region</span>}
+                    </label>
+                    {open && (
+                      <div style={{ margin: '4px 0 8px 20px' }}>
+                        {matches.length === 0
+                          ? <div style={{ fontSize: 12, color: '#888' }}>No {slot.label} tagged for {staffRegion || 'this region'}.</div>
+                          : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{matches.map(c => contactCard(c, isResPicked(c), () => toggleRes(c)))}</div>}
+                        <div style={{ marginTop: 6 }}>
+                          <PeoplePickerField label="Other (not listed)" value="" onChange={v => addResRaw(v)} searchUsers={handleSearchUsers} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {resPicks.length > 0 && (
+                <div style={{ marginTop: 6, borderTop: '1px solid #e0d8f0', paddingTop: 6 }}>
+                  <div style={{ fontSize: 11, color: '#605e5c', marginBottom: 4 }}>Suggested resources:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {resPicks.map((p, i) => (
+                      <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, background: '#e8f5e9', border: `1px solid ${HPE_GREEN}`, borderRadius: 4, padding: '2px 6px', color: '#1b5e20' }}>
+                        {p.split('/')[0].trim()}
+                        <button type="button" onClick={() => removeRes(p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1b5e20', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Engagement Purpose */}

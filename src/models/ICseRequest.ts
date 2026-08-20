@@ -49,6 +49,7 @@ export interface ICseRequest {
   signOffDate: string;
   opportunity?: string;
   notes: string;
+  additionalResources?: string;   // ;-delimited "Name / email" list of suggested specialist resources
   modified?: string;
   specialtyType?: string;
   datesProposedBy?: string;       // 'SE' | 'SSE' — who last proposed the current dates; the OTHER party confirms. Blank (legacy) = SE.
