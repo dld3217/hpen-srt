@@ -568,9 +568,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const realDates = (!r.remoteTbd && !!r.remoteStart) || (!r.onsiteTbd && !!r.onsiteStart);
     // No real dates on an accepted row → SSE Accept-to-start (nothing to confirm).
     if (amSse && r.requestStatus === 'Accepted' && !realDates) return true;
-    // A confirm is only meaningful when actual dates are proposed and awaiting the OTHER party.
+    // A confirm is meaningful whenever real dates exist and aren't yet confirmed — regardless of the
+    // (sometimes-unreliable) scheduleStatus flag. Covers POC-originated requests that arrive with dates but TBD.
     const awaitingConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(r.requestStatus) !== -1
-                     && r.scheduleStatus === 'Dates Proposed' && realDates;
+                     && realDates && r.scheduleStatus !== 'Dates Confirmed' && r.scheduleStatus !== 'Rescheduling';
     if (!awaitingConfirm) return false;
     const proposedBySse = r.datesProposedBy === 'SSE';
     return proposedBySse ? amSe : amSse; // SSE proposed → SE confirms; else SSE confirms
@@ -594,9 +595,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     // SSE gets an action to accept a dateless engagement (nothing to confirm) at any point after SED acceptance.
     // Gate on hasRealDates (not raw status) so a dishonest "Dates Proposed" with no actual date routes here.
     const acceptTbd      = req.requestStatus === 'Accepted' && !hasRealDates;
-    // A confirm is meaningful only when real dates are proposed and awaiting the OTHER party's response.
+    // A confirm is meaningful whenever real dates exist and aren't yet confirmed — regardless of the
+    // (sometimes-unreliable) scheduleStatus flag. Covers POC-originated requests that arrive with dates but TBD.
     const awaitingConfirm = ['Accepted', 'Scheduled', 'In Progress'].indexOf(req.requestStatus) !== -1
-                          && req.scheduleStatus === 'Dates Proposed' && hasRealDates;
+                          && hasRealDates && req.scheduleStatus !== 'Dates Confirmed' && req.scheduleStatus !== 'Rescheduling';
     // Reciprocal routing: whoever proposed last is NOT the one who confirms.
     const proposedBySse  = req.datesProposedBy === 'SSE';
     const sseConfirmTurn = awaitingConfirm && !proposedBySse;   // SE (or legacy) proposed → SSE confirms
