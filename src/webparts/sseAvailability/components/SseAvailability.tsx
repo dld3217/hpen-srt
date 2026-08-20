@@ -5,6 +5,7 @@ import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
+import { ContactDirectoryService, IContact, GENERALIST_CATEGORY } from '../../../services/ContactDirectoryService';
 import { ISseCommitment } from '../../../models/ICseRequest';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
@@ -29,32 +30,75 @@ const fmtRange = (a: string, b: string): string => {
 
 const CARD: React.CSSProperties = { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '14px 18px', marginBottom: 14 };
 
-export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp }) => {
+// A merged availability row: one SSE (from the directory roster) plus any confirmed commitments.
+interface IEntry {
+  name: string;
+  email: string;
+  phone: string;
+  bu: string;
+  inDir: boolean;               // came from the Contact Directory roster
+  items: ISseCommitment[];      // confirmed upcoming on-site / remote blocks
+}
+
+const norm = (s: string): string => (s || '').toLowerCase().trim();
+
+export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp, context }) => {
   const [loading, setLoading] = useState(true);
   const [commitments, setCommitments] = useState<ISseCommitment[]>([]);
+  const [sses, setSses] = useState<IContact[]>([]);
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
-    new CseRequestService(sp).getSseCommitments()
-      .then(c => setCommitments(c))
-      .catch(() => setCommitments([]))
-      .finally(() => setLoading(false));
+    Promise.all([
+      new CseRequestService(sp).getSseCommitments().catch(() => [] as ISseCommitment[]),
+      new ContactDirectoryService(context).getAll().catch(() => [] as IContact[])
+    ]).then(([c, contacts]) => {
+      setCommitments(c);
+      setSses(contacts.filter(x => x.category === GENERALIST_CATEGORY));
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center' }}><Spinner size={SpinnerSize.large} label="Loading SSE availability…" /></div>;
   }
 
-  // Group commitments by SSE name.
-  const groups: { [name: string]: ISseCommitment[] } = {};
-  commitments.forEach(c => {
-    const key = c.sseName || '(unassigned)';
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(c);
+  // Build one entry per directory SSE, attaching commitments matched by email (fallback: name).
+  const used = new Set<ISseCommitment>();
+  const entries: IEntry[] = [];
+  sses.forEach(s => {
+    const semail = norm(s.email), sname = norm(s.name);
+    const items = commitments.filter(c => {
+      const ce = norm(c.sseEmail);
+      if (ce && semail) return ce === semail;   // prefer email match
+      return norm(c.sseName) === sname;          // fallback to name
+    });
+    items.forEach(i => used.add(i));
+    entries.push({ name: s.name, email: s.email, phone: s.phone, bu: s.businessUnit, inDir: true, items });
   });
-  const names = Object.keys(groups)
-    .sort((a, b) => (a.toLowerCase() < b.toLowerCase() ? -1 : 1))
-    .filter(n => !filter || n.toLowerCase().indexOf(filter.toLowerCase()) !== -1);
+
+  // Any commitments whose SSE isn't in the directory (e.g. free-typed name) — keep them, grouped by name.
+  const adhoc: { [name: string]: ISseCommitment[] } = {};
+  commitments.forEach(c => {
+    if (used.has(c)) return;
+    const k = c.sseName || '(unassigned)';
+    if (!adhoc[k]) adhoc[k] = [];
+    adhoc[k].push(c);
+  });
+  Object.keys(adhoc).forEach(k => entries.push({
+    name: k, email: adhoc[k][0].sseEmail || '', phone: '', bu: '', inDir: false, items: adhoc[k]
+  }));
+
+  const bookedCount = entries.filter(e => e.items.length > 0).length;
+
+  // Filter by name; booked SSEs first, then alphabetical.
+  const shown = entries
+    .filter(e => !filter || e.name.toLowerCase().indexOf(filter.toLowerCase()) !== -1)
+    .sort((a, b) => {
+      const ab = a.items.length > 0 ? 0 : 1, bb = b.items.length > 0 ? 0 : 1;
+      if (ab !== bb) return ab - bb;
+      return norm(a.name) < norm(b.name) ? -1 : 1;
+    });
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
@@ -64,7 +108,7 @@ export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp }) => {
           <div style={{ width: 3, height: 24, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 15, fontWeight: 700 }}>🗓️ SSE Availability</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — confirmed upcoming SSE commitments</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — Strategic SSE roster &amp; upcoming commitments</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -77,36 +121,53 @@ export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp }) => {
       </div>
 
       <div style={{ fontSize: 12, color: '#605e5c', marginBottom: 14 }}>
-        Confirmed upcoming <strong>on-site</strong> and <strong>remote</strong> commitments per SSE — schedule new engagements around these to avoid double-booking. (Tentative / proposed dates are not shown; only locked-in dates.)
+        Every Strategic SSE (from the Contact Directory) with their confirmed upcoming <strong>on-site</strong> and <strong>remote</strong> commitments — schedule new engagements around these to avoid double-booking. (Only locked-in dates show; tentative / proposed dates do not.)
       </div>
 
-      <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter by SSE name…"
-        style={{ width: 260, maxWidth: '100%', fontSize: 13, padding: '6px 10px', border: '1px solid #ccc', borderRadius: 4, marginBottom: 14, boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
+        <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter by SSE name…"
+          style={{ width: 260, maxWidth: '100%', fontSize: 13, padding: '6px 10px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }} />
+        <div style={{ fontSize: 12, color: '#888' }}>
+          {entries.length} SSE{entries.length === 1 ? '' : 's'} · <strong style={{ color: HPE_NAVY }}>{bookedCount}</strong> with upcoming commitments
+        </div>
+      </div>
 
-      {commitments.length === 0 && (
-        <div style={CARD}>No confirmed upcoming commitments across any SSE right now. 👍</div>
+      {entries.length === 0 && (
+        <div style={CARD}>Couldn’t load the SSE roster from the Contact Directory, and there are no confirmed commitments to show.</div>
       )}
 
-      {commitments.length > 0 && names.length === 0 && (
+      {entries.length > 0 && shown.length === 0 && (
         <div style={CARD}>No SSE matches “{filter}”.</div>
       )}
 
-      {names.map(name => {
-        const items = groups[name].slice().sort((a, b) => (dstr(a.start) < dstr(b.start) ? -1 : 1));
+      {shown.map(e => {
+        const items = e.items.slice().sort((a, b) => (dstr(a.start) < dstr(b.start) ? -1 : 1));
+        const busy = items.length > 0;
         return (
-          <div key={name} style={CARD}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 6, borderBottom: `2px solid ${HPE_GREEN}` }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: HPE_NAVY }}>{name}</div>
-              <div style={{ fontSize: 11, color: '#888' }}>{items.length} upcoming</div>
+          <div key={(e.email || e.name) + (e.inDir ? '' : '~')} style={CARD}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: busy ? 8 : 0, paddingBottom: busy ? 6 : 0, borderBottom: busy ? `2px solid ${HPE_GREEN}` : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: HPE_NAVY }}>{e.name}</span>
+                {e.bu && <span style={{ fontSize: 10, color: '#605e5c', background: '#f3f2f1', borderRadius: 3, padding: '1px 6px' }}>{e.bu}</span>}
+                {e.phone && <a href={`tel:${e.phone}`} style={{ fontSize: 12, color: HPE_GREEN, textDecoration: 'none' }}>📞 {e.phone}</a>}
+                {!e.inDir && <span style={{ fontSize: 10, color: '#a4262c' }}>not in directory</span>}
+              </div>
+              <div style={{ fontSize: 11, color: busy ? '#888' : '#107c10', fontWeight: busy ? 400 : 600 }}>
+                {busy ? `${items.length} upcoming` : 'Available'}
+              </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {items.map((c, i) => (
-                <div key={i} style={{ fontSize: 13, color: '#323130' }}>
-                  {c.type === 'On-site' ? '🏢' : '💻'} <strong>{fmtRange(c.start, c.end)}</strong>
-                  <span style={{ color: '#605e5c' }}> · {c.type}{c.location ? ` · ${c.location}` : ''}</span>
-                </div>
-              ))}
-            </div>
+            {busy ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {items.map((c, i) => (
+                  <div key={i} style={{ fontSize: 13, color: '#323130' }}>
+                    {c.type === 'On-site' ? '🏢' : '💻'} <strong>{fmtRange(c.start, c.end)}</strong>
+                    <span style={{ color: '#605e5c' }}> · {c.type}{c.location ? ` · ${c.location}` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: '#a19f9d', fontStyle: 'italic' }}>No upcoming confirmed commitments.</div>
+            )}
           </div>
         );
       })}
