@@ -81,6 +81,22 @@ export function parseScheduleBlocks(json: string | undefined): IScheduleBlock[] 
   }));
 }
 
+// Admin demo-fill: a realistic multi-visit engagement for showing Charlie the full story —
+// a logged past visit (accounting), upcoming remote + prep, and two on-site trips weeks apart.
+export function demoScheduleBlocks(): IScheduleBlock[] {
+  const p2 = (n: number): string => (n < 10 ? '0' + n : '' + n);
+  const d = (off: number): string => { const t = new Date(); t.setDate(t.getDate() + off); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
+  const mk = (type: ScheduleBlockType, s: number, e: number, label: string, location = '', logged = false): IScheduleBlock =>
+    ({ ...newBlock(type), tbd: false, start: d(s), end: d(e), label, location, logged });
+  return [
+    mk('On-Site', -7, -5, 'Initial discovery visit', 'Customer HQ', true),  // last week — logged (actual)
+    mk('Remote',   4,  5, 'Design review'),
+    mk('Prep',    10, 11, 'Lab build + exec deck'),
+    mk('On-Site', 14, 16, 'Solution deep-dive', 'Customer HQ'),
+    mk('On-Site', 35, 36, 'Executive readout', 'Customer HQ'),             // second visit, weeks later
+  ];
+}
+
 let _seq = 0;
 export function newBlock(type: ScheduleBlockType): IScheduleBlock {
   _seq += 1;

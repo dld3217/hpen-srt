@@ -11,6 +11,7 @@ import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 export interface INewSpecialProjectModalProps {
   sp: SPFI;
   context: WebPartContext;
+  isAdmin?: boolean;       // gates the 🧪 demo-fill
   onClose: () => void;
   onCreated: () => void;   // ask the dashboard to reload
 }
@@ -23,7 +24,7 @@ const INPUT: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fon
 // Category + Initiative come from the shared SRTSpecialProjects config; a brand-new initiative
 // typed here is persisted back so the next requester picks the SAME one (→ it aggregates).
 // One CSERequests row is created per staffed SSE — cross-geo by design; no BU/Region set.
-export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({ sp, onClose, onCreated }) => {
+export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({ sp, isAdmin, onClose, onCreated }) => {
   const [spMap, setSpMap]           = useState<SpecialProjectsMap>({});
   const [loading, setLoading]       = useState(true);
   const [category, setCategory]     = useState('');
@@ -217,7 +218,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
               {/* Schedule — attaches to the first SSE (the creator's own time) */}
               <div>
                 <div style={LABEL}>Schedule <span style={{ fontWeight: 400, color: '#888' }}>(optional — your Prep &amp; On-Site time; applies to the first SSE)</span></div>
-                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} />
+                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} showDemo={isAdmin} />
               </div>
 
               {error && (

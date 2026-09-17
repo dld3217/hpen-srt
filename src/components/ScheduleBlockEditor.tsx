@@ -1,7 +1,7 @@
 import * as React from 'react';
 import {
   IScheduleBlock, ScheduleBlockType, SCHEDULE_BLOCK_TYPES, BLOCK_STYLE,
-  newBlock, blockDays, plannedHours,
+  newBlock, blockDays, plannedHours, demoScheduleBlocks,
 } from '../models/ScheduleBlock';
 import { HPE_NAVY } from '../styles/hpe';
 
@@ -10,6 +10,7 @@ export interface IScheduleBlockEditorProps {
   onChange: (blocks: IScheduleBlock[]) => void;
   allowTypes?: ScheduleBlockType[];   // default: all three
   showAccounting?: boolean;           // show the Planned→Actual toggle + actual-hours (dashboard)
+  showDemo?: boolean;                 // admin-only 🧪 quick-fill of a realistic multi-visit schedule
 }
 
 const FLD: React.CSSProperties = { fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, boxSizing: 'border-box' };
@@ -17,7 +18,7 @@ const XBTN: React.CSSProperties = { background: 'none', border: 'none', color: '
 
 // Repeatable, typed time-block editor. Each block is an independent date range (contiguous or not).
 // Planning always; accounting (Planned→Actual switch + optional actual hours) when showAccounting.
-export const ScheduleBlockEditor: React.FC<IScheduleBlockEditorProps> = ({ blocks, onChange, allowTypes, showAccounting }) => {
+export const ScheduleBlockEditor: React.FC<IScheduleBlockEditorProps> = ({ blocks, onChange, allowTypes, showAccounting, showDemo }) => {
   const types = (allowTypes && allowTypes.length) ? allowTypes : SCHEDULE_BLOCK_TYPES;
 
   const update = (id: string, patch: Partial<IScheduleBlock>): void =>
@@ -103,6 +104,12 @@ export const ScheduleBlockEditor: React.FC<IScheduleBlockEditorProps> = ({ block
             + {BLOCK_STYLE[t].icon} {t}
           </button>
         ))}
+        {showDemo && (
+          <button onClick={() => onChange(demoScheduleBlocks())} title="Fill a realistic multi-visit demo schedule"
+            style={{ fontSize: 11, padding: '4px 10px', background: '#f3e8ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+            🧪 Demo
+          </button>
+        )}
         {totalDays > 0 && (
           <span style={{ marginLeft: 'auto', fontSize: 11, color: HPE_NAVY }}>Planned total: <strong>{totalDays}d</strong></span>
         )}
