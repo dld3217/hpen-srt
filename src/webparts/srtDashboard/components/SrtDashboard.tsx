@@ -6,6 +6,7 @@ import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService, BURegionMap, SpecialProjectsMap } from '../../../services/ConfigService';
+import { ContactDirectoryService, GENERALIST_CATEGORY } from '../../../services/ContactDirectoryService';
 import { buildGeoCanonicalizer, dedupeByKey, normKey } from '../../../models/geoNormalize';
 import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
@@ -128,7 +129,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [error, setError]           = useState('');
   const [isAdmin, setIsAdmin]           = useState(false);
   const [isSED, setIsSED]               = useState(false);
-  const [isSSE, setIsSSE]               = useState(false);
+  const [configSSE, setConfigSSE]       = useState(false);                    // manual SRTSSEs override list
+  const [sseEmails, setSseEmails]       = useState<Set<string>>(new Set());   // Contact Directory SSE roster
   const [showAdmin, setShowAdmin]       = useState(false);
   const [showNewSpecial, setShowNewSpecial] = useState(false);
   const [savingId, setSavingId]         = useState<number | null>(null);
@@ -214,6 +216,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     ? displayName.split(',')[1].trim().split(' ')[0]
     : displayName.split(' ')[0];
   const userName     = (realIsAdmin && actAs) ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
+  // An SSE = present in the Contact Directory "Generalist" roster, OR on the manual SRTSSEs override.
+  const isSSE        = configSSE || sseEmails.has(userEmail);
 
   const applyActAs = (email: string): void => {
     const e = resolveActAs(email);
@@ -243,12 +247,23 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const configSvc = new ConfigService(sp);
     Promise.all([configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail), configSvc.isSSE(userEmail)])
       .then(([admin, sed, sse]) => {
-        setIsAdmin(admin); setIsSED(sed); setIsSSE(sse);
+        setIsAdmin(admin); setIsSED(sed); setConfigSSE(sse);
         setViewMode(admin || sed ? 'all' : 'mine');
-        setShowSpecial(admin || sed || sse);   // Special Projects matter to admins/SEDs/SSEs, not the SE community
+        setShowSpecial(admin || sed || sse || sseEmails.has(userEmail));   // Special Projects matter to admins/SEDs/SSEs, not the SE community
       })
       .catch(() => undefined);
   }, [userEmail]);
+
+  // SSE roster from the Contact Directory (Generalist category) — auto-detects who can create
+  // Special Projects so admins don't hand-maintain a list. Bumps showSpecial on for SSEs once loaded.
+  useEffect(() => {
+    new ContactDirectoryService(context).getAll()
+      .then(cs => setSseEmails(new Set(cs.filter(c => c.category === GENERALIST_CATEGORY).map(c => (c.email || '').toLowerCase()).filter(Boolean))))
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (sseEmails.has(userEmail)) setShowSpecial(true);
+  }, [userEmail, sseEmails]);
 
   useEffect(() => {
     if (loading) return;

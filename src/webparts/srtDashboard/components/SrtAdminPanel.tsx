@@ -693,7 +693,8 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
                 SSEs — can create Special Projects
               </div>
               <p style={{ fontSize: 11, color: '#605e5c', margin: '0 0 8px' }}>
-                These SSEs get the <strong>⭐ New Special Project</strong> button on the dashboard. Admins and SEDs always have it.
+                SSEs in the <strong>Contact Directory</strong> automatically get the <strong>⭐ New Special Project</strong> button — no need to list them here.
+                Use this list only to grant it to someone <em>not</em> in the directory. Admins and SEDs always have it.
               </p>
               {sseLoading ? <div style={{ color: '#888', fontSize: 13 }}>Loading…</div> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
