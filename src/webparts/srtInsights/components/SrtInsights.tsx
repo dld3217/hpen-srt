@@ -7,6 +7,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ICseRequest } from '../../../models/ICseRequest';
 import { IEnvironmentRow } from '../../../models/StrategicEngagement';
+import { parseSseDisplay, sseNameKey } from '../../../models/sseIdentity';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface ISrtInsightsProps {
@@ -19,11 +20,6 @@ const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/Sit
 
 const parseEnv = (r: ICseRequest): IEnvironmentRow[] => {
   try { const a = JSON.parse(r.currentEnvironment || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
-};
-const sseName = (r: ICseRequest): string => {
-  const v = r.requestedCse || '';
-  const name = v.indexOf('/') !== -1 ? v.split('/')[0].trim() : v.trim();
-  return name || '(unassigned)';
 };
 const isStrategic = (r: ICseRequest): boolean => r.engagementType === 'Strategic Engagement';
 const isActive = (r: ICseRequest): boolean => ['Complete', 'Declined', 'Cancelled'].indexOf(r.requestStatus) === -1;
@@ -93,15 +89,31 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   const vendorIcon = (field: string): string => vendorSort.field !== field ? ' ⇅' : vendorSort.dir === 'asc' ? ' ▲' : ' ▼';
   const displaceTargets = vendorRows.reduce((s, v) => s + v.displace, 0);
 
-  // SSE workload (active engagements per SSE)
-  const sseAgg: Record<string, { active: number; strategic: number; poc: number }> = {};
-  requests.filter(isActive).forEach(r => {
-    const n = sseName(r);
-    const a = sseAgg[n] || { active: 0, strategic: 0, poc: 0 };
-    a.active += 1; if (isStrategic(r)) a.strategic += 1; else a.poc += 1;
-    sseAgg[n] = a;
+  // SSE workload (active engagements per SSE) — reconcile the same person across name spellings
+  // ("Clemmer, Charlie (title)" / "Clemmer, Charlie (title - Region)" / "Charlie Clemmer").
+  // Pass 1: learn name → email from any record carrying both, so an email-less row still folds in.
+  const nameToEmail: Record<string, string> = {};
+  requests.forEach(r => {
+    const v = r.requestedCse || '';
+    if (v.indexOf('/') === -1) return;
+    const email = v.split('/')[1].trim().toLowerCase();
+    const nk = sseNameKey(parseSseDisplay(v.split('/')[0].trim()));
+    if (email && nk && !nameToEmail[nk]) nameToEmail[nk] = email;
   });
-  const sseRows = Object.keys(sseAgg).map(n => ({ name: n, ...sseAgg[n] })).sort((a, b) => {
+  // Pass 2: aggregate keyed by email (resolved via record OR the name→email map) else normalized name.
+  const sseAgg: Record<string, { name: string; active: number; strategic: number; poc: number }> = {};
+  requests.filter(isActive).forEach(r => {
+    const v = r.requestedCse || '';
+    const rawName = v.indexOf('/') !== -1 ? v.split('/')[0].trim() : v.trim();
+    const email = v.indexOf('/') !== -1 ? v.split('/')[1].trim().toLowerCase() : '';
+    const name = parseSseDisplay(rawName) || rawName || '(unassigned)';
+    const nk = sseNameKey(name);
+    const key = email || nameToEmail[nk] || nk || '(unassigned)';
+    const a = sseAgg[key] || { name, active: 0, strategic: 0, poc: 0 };
+    a.active += 1; if (isStrategic(r)) a.strategic += 1; else a.poc += 1;
+    sseAgg[key] = a;
+  });
+  const sseRows = Object.keys(sseAgg).map(k => ({ ...sseAgg[k] })).sort((a, b) => {
     const cmp = sseSort.field === 'name' ? a.name.localeCompare(b.name) : (a[sseSort.field] as number) - (b[sseSort.field] as number);
     return sseSort.dir === 'asc' ? cmp : -cmp;
   });

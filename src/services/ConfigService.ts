@@ -34,6 +34,17 @@ const DEFAULT_SSE_TEAMS: ISSETeam[] = [
   { name: 'SASE', managerEmail: '' },
 ];
 
+// Special Projects taxonomy: non-geo CIC/Marketing "categories" → their "initiatives".
+// Category list is admin-managed (add-only); initiatives are admin-seeded repeatables PLUS
+// requester add-on-the-fly (persisted here so the next SSE picks the SAME initiative → it aggregates).
+export type SpecialProjectsMap = Record<string, string[]>;
+
+const DEFAULT_SPECIAL_PROJECTS: SpecialProjectsMap = {
+  'Houston CIC': ['Bee Counting', 'Hardware Demo'],
+  'San Jose CIC': [],
+  'Marketing': ['HPE Marketing Days', 'Discover', 'Sales Kick Off', 'TechJam'],
+};
+
 const DEFAULT_BU_REGIONS: BURegionMap = {
   'Enterprise-West': {
     regions: { 'NorCal': {}, 'PacNW': {}, 'SoCal': {}, 'Southwest': {} }
@@ -96,6 +107,37 @@ export class ConfigService {
     return false;
   }
 
+  // SRTSSEs — emails allowed to initiate (create) Special Projects (CIC / Marketing).
+  public async getSSEs(): Promise<string[]> {
+    try {
+      const items: { Value: string }[] = await this._sp.web.lists
+        .getByTitle('AppConfig').items
+        .filter("Title eq 'SRTSSEs'").select('Value')();
+      if (items.length > 0 && items[0].Value) {
+        return items[0].Value.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+      }
+    } catch { /* fall through */ }
+    return [];
+  }
+
+  public async isSSE(email: string): Promise<boolean> {
+    const list = await this.getSSEs();
+    return list.includes(email.trim().toLowerCase());
+  }
+
+  public async saveSSEs(users: string[]): Promise<void> {
+    const items: { Id: number }[] = await this._sp.web.lists
+      .getByTitle('AppConfig').items
+      .filter("Title eq 'SRTSSEs'").select('Id')();
+    if (items.length > 0) {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .getById(items[0].Id).update({ Value: users.join(',') });
+    } else {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .add({ Title: 'SRTSSEs', Value: users.join(',') });
+    }
+  }
+
   public async saveSuperUsers(users: string[]): Promise<void> {
     const items: { Id: number }[] = await this._sp.web.lists
       .getByTitle('AppConfig').items
@@ -156,6 +198,37 @@ export class ConfigService {
     } else {
       await this._sp.web.lists.getByTitle('AppConfig').items
         .add({ Title: 'SSETeams', Value: JSON.stringify(teams) });
+    }
+  }
+
+  public async getSpecialProjects(): Promise<SpecialProjectsMap> {
+    try {
+      const items: { Value: string }[] = await this._sp.web.lists
+        .getByTitle('AppConfig').items
+        .filter("Title eq 'SRTSpecialProjects'").select('Value')();
+      if (items.length > 0 && items[0].Value) {
+        const raw = JSON.parse(items[0].Value) as Record<string, unknown>;
+        // Normalize: guarantee every category maps to a string[] (tolerate hand-edited nulls/objects).
+        const out: SpecialProjectsMap = {};
+        for (const [cat, val] of Object.entries(raw)) {
+          out[cat] = Array.isArray(val) ? (val as unknown[]).map(v => String(v)).filter(Boolean) : [];
+        }
+        return out;
+      }
+    } catch { /* fall through */ }
+    return { ...DEFAULT_SPECIAL_PROJECTS };
+  }
+
+  public async saveSpecialProjects(map: SpecialProjectsMap): Promise<void> {
+    const items: { Id: number }[] = await this._sp.web.lists
+      .getByTitle('AppConfig').items
+      .filter("Title eq 'SRTSpecialProjects'").select('Id')();
+    if (items.length > 0) {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .getById(items[0].Id).update({ Value: JSON.stringify(map) });
+    } else {
+      await this._sp.web.lists.getByTitle('AppConfig').items
+        .add({ Title: 'SRTSpecialProjects', Value: JSON.stringify(map) });
     }
   }
 

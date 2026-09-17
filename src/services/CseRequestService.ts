@@ -16,6 +16,7 @@ const SP_SELECT = [
   'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'AdditionalResources', 'Modified', 'SpecialtyType',
   'EngagementType', 'EngagementPurpose', 'CurrentEnvironment', 'HasDisplacement', 'EngagementOutcome',
   'DesiredOutcome', 'DesiredOutcomeDetail', 'EngagementPurposeOther', 'DatesProposedBy',
+  'SpecialProjectCategory', 'SpecialProjectInitiative',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,6 +79,8 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     desiredOutcomeDetail: item.DesiredOutcomeDetail || '',
     engagementPurposeOther: item.EngagementPurposeOther || '',
     datesProposedBy: item.DatesProposedBy || '',
+    specialProjectCategory: item.SpecialProjectCategory || '',
+    specialProjectInitiative: item.SpecialProjectInitiative || '',
   };
 }
 
@@ -129,6 +132,8 @@ export class CseRequestService {
       DesiredOutcome: req.desiredOutcome || [],
       DesiredOutcomeDetail: req.desiredOutcomeDetail || '',
       EngagementPurposeOther: req.engagementPurposeOther || '',
+      SpecialProjectCategory: req.specialProjectCategory || '',
+      SpecialProjectInitiative: req.specialProjectInitiative || '',
     });
     return result.Id || result.id || 0;
   }
@@ -163,11 +168,15 @@ export class CseRequestService {
   }
 
   async getAll(): Promise<ICseRequest[]> {
+    // Page fully so CSERequests over the page size neither truncates the Dashboard/Insights
+    // counts nor throws the view threshold. Requires Created (sort) indexed on the list.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items: any[] = await this.sp.web.lists.getByTitle(LIST_NAME).items
+    const items: any[] = [];
+    const q = this.sp.web.lists.getByTitle(LIST_NAME).items
       .select(...SP_SELECT)
       .orderBy('Created', false)
-      .top(2000)();
+      .top(2000);
+    for await (const page of q) items.push(...page);
     return items.map(mapToRequest);
   }
 
@@ -244,6 +253,14 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ SolutionsFocus: solutionsFocus });
   }
 
+  // Set / change a Special Project's category or initiative on an existing row.
+  async updateSpecialProject(id: number, fields: { category?: string; initiative?: string }): Promise<void> {
+    const update: Record<string, unknown> = {};
+    if (fields.category !== undefined) update.SpecialProjectCategory = fields.category;
+    if (fields.initiative !== undefined) update.SpecialProjectInitiative = fields.initiative;
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update(update);
+  }
+
   async updateOpportunityAndNotes(id: number, opportunity: string, notes: string): Promise<void> {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
       Opportunity: opportunity,
@@ -255,8 +272,9 @@ export class CseRequestService {
   // Pass an sseEmail to scope to one SSE; omit for all SSEs (standalone availability view).
   async getSseCommitments(sseEmail?: string): Promise<ISseCommitment[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items: Record<string, any>[] = await this.sp.web.lists.getByTitle(LIST_NAME).items
-      .select(...SP_SELECT).top(4000)();
+    const items: Record<string, any>[] = [];
+    const q = this.sp.web.lists.getByTitle(LIST_NAME).items.select(...SP_SELECT).top(2000);
+    for await (const page of q) items.push(...page);
     const reqs = items.map(mapToRequest);
     const now = new Date();
     const pad = (n: number): string => (n < 10 ? '0' + n : '' + n);

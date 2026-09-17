@@ -1,6 +1,6 @@
 // Strategic Engagement — shared types & taxonomy (Phase 1 / v1.0.69)
 
-export type EngagementType = 'POC Support' | 'Strategic Engagement';
+export type EngagementType = 'POC Support' | 'Strategic Engagement' | 'Special Project';
 
 export type EngagementPurpose =
   | 'Strategic Briefing'

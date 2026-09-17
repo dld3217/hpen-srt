@@ -62,6 +62,10 @@ export interface ICseRequest {
   desiredOutcome?: string[];      // GOAL(s), multi-choice selected outcomes (set at request time)
   desiredOutcomeDetail?: string;  // objection list + any 'Other' free text
   engagementPurposeOther?: string; // free text when EngagementPurpose = Other
+  // Special Project (CIC / Marketing) — non-geo track; EngagementType = 'Special Project'.
+  // These are staffed cross-geo and are EXCLUDED from all geo/BU/Region rollups.
+  specialProjectCategory?: string;   // e.g. 'Houston CIC', 'Marketing' (from SRTSpecialProjects config)
+  specialProjectInitiative?: string; // e.g. 'Bee Counting' — pick-or-add; persists to config so SSEs aggregate
 }
 
 export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: string }> = {

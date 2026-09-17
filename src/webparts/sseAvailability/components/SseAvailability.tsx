@@ -7,6 +7,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ContactDirectoryService, IContact, GENERALIST_CATEGORY } from '../../../services/ContactDirectoryService';
 import { ISseCommitment } from '../../../models/ICseRequest';
+import { parseSseDisplay, sseNameKey } from '../../../models/sseIdentity';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface ISseAvailabilityProps {
@@ -63,30 +64,42 @@ export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp, context }
     return <div style={{ padding: 40, textAlign: 'center' }}><Spinner size={SpinnerSize.large} label="Loading SSE availability…" /></div>;
   }
 
-  // Build one entry per directory SSE, attaching commitments matched by email (fallback: name).
+  // Reconcile the same SSE across name spellings (title drift, "First Last" vs "Last, First",
+  // email-less variants). Pass 1: learn name → email from any commitment carrying both.
+  const nameToEmail: { [key: string]: string } = {};
+  commitments.forEach(c => {
+    const email = norm(c.sseEmail);
+    const nk = sseNameKey(parseSseDisplay(c.sseName));
+    if (email && nk && !nameToEmail[nk]) nameToEmail[nk] = email;
+  });
+  // A commitment's stable identity: email (own or via the name map) else normalized clean name.
+  const commitIdentity = (c: ISseCommitment): string => {
+    const nk = sseNameKey(parseSseDisplay(c.sseName));
+    return norm(c.sseEmail) || nameToEmail[nk] || nk || '(unassigned)';
+  };
+
+  // Build one entry per directory SSE, attaching commitments by resolved identity.
   const used = new Set<ISseCommitment>();
   const entries: IEntry[] = [];
   sses.forEach(s => {
-    const semail = norm(s.email), sname = norm(s.name);
-    const items = commitments.filter(c => {
-      const ce = norm(c.sseEmail);
-      if (ce && semail) return ce === semail;   // prefer email match
-      return norm(c.sseName) === sname;          // fallback to name
-    });
+    const sid = norm(s.email) || nameToEmail[sseNameKey(s.name)] || sseNameKey(s.name);
+    const items = commitments.filter(c => commitIdentity(c) === sid);
     items.forEach(i => used.add(i));
     entries.push({ name: s.name, email: s.email, phone: s.phone, bu: s.businessUnit, inDir: true, items });
   });
 
-  // Any commitments whose SSE isn't in the directory (e.g. free-typed name) — keep them, grouped by name.
-  const adhoc: { [name: string]: ISseCommitment[] } = {};
+  // Any commitments whose SSE isn't in the directory (e.g. free-typed name) — group by resolved
+  // identity so variants merge, and show the cleaned display name.
+  const adhoc: { [key: string]: ISseCommitment[] } = {};
   commitments.forEach(c => {
     if (used.has(c)) return;
-    const k = c.sseName || '(unassigned)';
+    const k = commitIdentity(c);
     if (!adhoc[k]) adhoc[k] = [];
     adhoc[k].push(c);
   });
   Object.keys(adhoc).forEach(k => entries.push({
-    name: k, email: adhoc[k][0].sseEmail || '', phone: '', bu: '', inDir: false, items: adhoc[k]
+    name: parseSseDisplay(adhoc[k][0].sseName) || adhoc[k][0].sseName || '(unassigned)',
+    email: adhoc[k][0].sseEmail || '', phone: '', bu: '', inDir: false, items: adhoc[k]
   }));
 
   const bookedCount = entries.filter(e => e.items.length > 0).length;

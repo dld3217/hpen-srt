@@ -7,6 +7,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react';
 import { ConfigService, BURegionMap, IBUConfig, IRegionConfig, ISSETeam } from '../../../services/ConfigService';
 import { ContactDirectoryService, IContact } from '../../../services/ContactDirectoryService';
 import { CseRequestService } from '../../../services/CseRequestService';
+import { ISseCommitment } from '../../../models/ICseRequest';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
@@ -334,9 +335,24 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   const [contactsLoading, setContactsLoading]     = useState(false);
   const [dismissedIds, setDismissedIds]           = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds]             = useState<Set<number>>(new Set());
+  const [commitments, setCommitments]             = useState<ISseCommitment[]>([]);
+  const [commitLoading, setCommitLoading]         = useState(false);
 
   const userEmail       = context.pageContext.user.email;
   const userDisplayName = context.pageContext.user.displayName || userEmail;
+
+  // Selected SSE's confirmed commitments → double-book nudge (soft warn, does not block).
+  const sseEmail = formData.requestedSse.includes('/') ? formData.requestedSse.split('/').pop()!.trim().toLowerCase() : '';
+  useEffect(() => {
+    if (!sseEmail) { setCommitments([]); return; }
+    let cancelled = false;
+    setCommitLoading(true);
+    new CseRequestService(sp).getSseCommitments(sseEmail)
+      .then(c => { if (!cancelled) setCommitments(c); })
+      .catch(() => { if (!cancelled) setCommitments([]); })
+      .finally(() => { if (!cancelled) setCommitLoading(false); });
+    return () => { cancelled = true; };
+  }, [sseEmail]);
 
   useEffect(() => {
     const configSvc = new ConfigService(sp);
@@ -828,6 +844,52 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
             placeholder="Describe what SSE help is needed, required skill set, and any relevant context…"
             style={{ ...INPUT, resize: 'vertical' }} />
         </div>
+
+        {sseEmail && ((): JSX.Element => {
+          const dstr = (iso: string): string => (iso || '').substring(0, 10);
+          const rangesOverlap = (aS: string, aE: string, bS: string, bE: string): boolean => aS <= bE && bS <= aE;
+          const proposedBlocks: Array<{ s: string; e: string }> = [];
+          if ((formData.supportType === 'Remote' || formData.supportType === 'Both') && !formData.remoteTbd && formData.remoteStart) proposedBlocks.push({ s: dstr(formData.remoteStart), e: dstr(formData.remoteEnd || formData.remoteStart) });
+          if ((formData.supportType === 'On-Site' || formData.supportType === 'Both') && !formData.onsiteTbd && formData.onsiteStart) proposedBlocks.push({ s: dstr(formData.onsiteStart), e: dstr(formData.onsiteEnd || formData.onsiteStart) });
+          const commitConflicts = (c: ISseCommitment): boolean => proposedBlocks.some(p => rangesOverlap(p.s, p.e, dstr(c.start), dstr(c.end)));
+          const anyConflict = commitments.some(commitConflicts);
+          const sseShortName = formData.requestedSse.includes('/') ? formData.requestedSse.split('/')[0].trim() : '';
+          const fmtRange = (s: string, e: string): string => { const a = dstr(s), b = dstr(e); return b && b !== a ? `${a} – ${b}` : a; };
+          return (
+            <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 6,
+              background: anyConflict ? '#fdf2f3' : '#f3f9f4',
+              border: `1px solid ${anyConflict ? '#d68a90' : '#bcdcc4'}` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#3b3a39', marginBottom: 6 }}>
+                🗓️ {sseShortName || 'SSE'}&rsquo;s upcoming commitments
+                {commitLoading && <span style={{ fontWeight: 400, color: '#888' }}> — checking…</span>}
+              </div>
+              {!commitLoading && commitments.length === 0 && (
+                <div style={{ fontSize: 12, color: '#605e5c' }}>No confirmed on-site or remote commitments coming up. 👍</div>
+              )}
+              {!commitLoading && commitments.length > 0 && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {commitments.map((c, i) => {
+                      const clash = commitConflicts(c);
+                      return (
+                        <div key={i} style={{ fontSize: 12, color: clash ? '#a4262c' : '#323130', fontWeight: clash ? 700 : 400 }}>
+                          {c.type === 'On-site' ? '🏢' : '💻'} <strong>{fmtRange(c.start, c.end)}</strong> · {c.type}
+                          {c.location ? ` · ${c.location}` : ''}
+                          {clash && ' · ⚠️ overlaps your proposed dates'}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {anyConflict && (
+                    <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#a4262c' }}>
+                      ⚠️ Your proposed dates overlap {sseShortName || 'the SSE'}&rsquo;s existing commitment(s). Pick different dates or confirm this is intended.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {(formData.supportType === 'Remote' || formData.supportType === 'Both') && (
           <ScheduleBlock label="Remote Schedule" dateOnly

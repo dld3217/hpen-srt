@@ -5,12 +5,14 @@ import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
 import { CseRequestService } from '../../../services/CseRequestService';
-import { ConfigService } from '../../../services/ConfigService';
+import { ConfigService, BURegionMap, SpecialProjectsMap } from '../../../services/ConfigService';
+import { buildGeoCanonicalizer, dedupeByKey, normKey } from '../../../models/geoNormalize';
 import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { DISPOSITION_STYLE, IEnvironmentRow } from '../../../models/StrategicEngagement';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
+import { NewSpecialProjectModal } from './NewSpecialProjectModal';
 
 const parseEnvRows = (json: string | undefined): IEnvironmentRow[] => {
   try { const a = JSON.parse(json || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -120,7 +122,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [error, setError]           = useState('');
   const [isAdmin, setIsAdmin]           = useState(false);
   const [isSED, setIsSED]               = useState(false);
+  const [isSSE, setIsSSE]               = useState(false);
   const [showAdmin, setShowAdmin]       = useState(false);
+  const [showNewSpecial, setShowNewSpecial] = useState(false);
   const [savingId, setSavingId]         = useState<number | null>(null);
   const [decliningId, setDecliningId]   = useState<number | null>(null);
   const [declineNote, setDeclineNote]   = useState('');
@@ -140,11 +144,16 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [cancelNote, setCancelNote]             = useState('');
   const [signOffId, setSignOffId]               = useState<number | null>(null);
   const [signOffName, setSignOffName]           = useState('');
+  const [disputeId, setDisputeId]               = useState<number | null>(null);
+  const [disputeNote, setDisputeNote]           = useState('');
   const [filterStatus, setFilterStatus]         = useState('All');
   const [filterBU, setFilterBU]                 = useState('All');
   const [filterRegion, setFilterRegion]         = useState('All');
   const [filterPriority, setFilterPriority]     = useState('All');
   const [filterType, setFilterType]             = useState('All');
+  const [showSpecial, setShowSpecial]           = useState(false);
+  const [filterSpecialCat, setFilterSpecialCat]   = useState('All');
+  const [filterSpecialInit, setFilterSpecialInit] = useState('All');
   const [filterSearch, setFilterSearch]         = useState('');
   const [viewMode, setViewMode]                 = useState<'mine' | 'all'>('mine');
   const [actAs, setActAs]                       = useState<string>(() => (localStorage.getItem('srt_actAs') || '').toLowerCase());
@@ -157,6 +166,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
+  const [editInitId, setEditInitId]             = useState<number | null>(null);
+  const [editInitVal, setEditInitVal]           = useState('');
   const [activeTile, setActiveTile]             = useState<string | null>(null);
   const [sortField, setSortField]               = useState<'customer' | 'priority' | 'status' | 'type'>('customer');
   const [sortDir, setSortDir]                   = useState<'asc' | 'desc'>('asc');
@@ -165,15 +176,35 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [savingNotes, setSavingNotes]             = useState(false);
   const [urlActionBanner, setUrlActionBanner]     = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
+  const [buRegionsCfg, setBuRegionsCfg]           = useState<BURegionMap>({});
+  const [spConfig, setSpConfig]                   = useState<SpecialProjectsMap>({});
   const tableRef                                = useRef<HTMLDivElement>(null);
 
+  // Gold-standard canonicalizer — snaps dirty BU/Region values ("Enterprise West", "Midwest ")
+  // to the canonical form from AppConfig BURegions so filters/display/reports speak one vocabulary.
+  const geo = React.useMemo(() => buildGeoCanonicalizer(buRegionsCfg), [buRegionsCfg]);
+
+  // Names that are Special-Project categories/initiatives (CIC / Marketing / …) — these are NOT geo
+  // and must never appear in the BU/Region dropdowns even when dirty data files them in a geo field.
+  const specialNameKeys = React.useMemo(() => {
+    const s = new Set<string>();
+    for (const [cat, inits] of Object.entries(spConfig)) {
+      if (cat) s.add(normKey(cat));
+      (inits || []).forEach(i => { if (i) s.add(normKey(i)); });
+    }
+    return s;
+  }, [spConfig]);
+
   const realEmail    = context.pageContext.user.email.toLowerCase();
-  const userEmail    = actAs || realEmail;                 // EFFECTIVE identity (spoofable for testing)
+  // The "view as" spoof is only honored when the REAL user is a verified admin. Otherwise the
+  // srt_actAs localStorage key (settable by anyone via console) could flip client-side isAdmin/
+  // isSED to another user's role and unlock admin UI. Non-admins always resolve to their real id.
+  const userEmail    = (realIsAdmin && actAs) ? actAs : realEmail;   // EFFECTIVE identity (admin-only spoof)
   const displayName  = context.pageContext.user.displayName || realEmail;
   const realFirst    = displayName.includes(',')
     ? displayName.split(',')[1].trim().split(' ')[0]
     : displayName.split(' ')[0];
-  const userName     = actAs ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
+  const userName     = (realIsAdmin && actAs) ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
 
   const applyActAs = (email: string): void => {
     const e = resolveActAs(email);
@@ -194,15 +225,18 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   // Real admin flag — from the REAL user, computed once — gates the test bar so you can't lock yourself out.
   useEffect(() => {
     new ConfigService(sp).isSuperUser(realEmail).then(setRealIsAdmin).catch(() => undefined);
+    new ConfigService(sp).getBURegions().then(setBuRegionsCfg).catch(() => undefined);
+    new ConfigService(sp).getSpecialProjects().then(setSpConfig).catch(() => undefined);
   }, []);
 
   // Role + default view for the EFFECTIVE user — recomputes whenever you "view as" someone.
   useEffect(() => {
     const configSvc = new ConfigService(sp);
-    Promise.all([configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail)])
-      .then(([admin, sed]) => {
-        setIsAdmin(admin); setIsSED(sed);
+    Promise.all([configSvc.isSuperUser(userEmail), configSvc.isSED(userEmail), configSvc.isSSE(userEmail)])
+      .then(([admin, sed, sse]) => {
+        setIsAdmin(admin); setIsSED(sed); setIsSSE(sse);
         setViewMode(admin || sed ? 'all' : 'mine');
+        setShowSpecial(admin || sed || sse);   // Special Projects matter to admins/SEDs/SSEs, not the SE community
       })
       .catch(() => undefined);
   }, [userEmail]);
@@ -469,6 +503,49 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } finally { setSavingId(null); }
   };
 
+  // SE-facing completion verification — the SSE marks Complete, the SE confirms it, and that
+  // confirmation IS the sign-off (one click, auto-stamped with the SE's name). Charlie's flow.
+  const handleSeVerify = async (req: ICseRequest): Promise<void> => {
+    setSavingId(req.id!);
+    try {
+      const name = parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || userName;
+      await new CseRequestService(sp).signOff(req.id!, name);
+      setRequests(prev => prev.map(r => r.id === req.id ? { ...r, signedOffBy: name, signOffDate: new Date().toISOString(), requestStatus: 'Complete' } : r));
+    } finally { setSavingId(null); }
+  };
+
+  // Set/change a Special Project's initiative inline. A brand-new name is also persisted to the
+  // SRTSpecialProjects config so it becomes a picker option everywhere (matches the create modal).
+  const handleSaveInitiative = async (req: ICseRequest): Promise<void> => {
+    const initVal = editInitVal.trim();
+    setSavingId(req.id!);
+    try {
+      const cfgKey = Object.keys(spConfig).find(k => normKey(k) === normKey(req.specialProjectCategory || ''));
+      if (initVal && cfgKey) {
+        const existing = spConfig[cfgKey] || [];
+        if (!existing.some(i => normKey(i) === normKey(initVal))) {
+          const updated = { ...spConfig, [cfgKey]: [...existing, initVal] };
+          await new ConfigService(sp).saveSpecialProjects(updated);
+          setSpConfig(updated);
+        }
+      }
+      await new CseRequestService(sp).updateSpecialProject(req.id!, { initiative: initVal });
+      setRequests(prev => prev.map(r => r.id === req.id ? { ...r, specialProjectInitiative: initVal } : r));
+      setEditInitId(null); setEditInitVal('');
+    } finally { setSavingId(null); }
+  };
+
+  // SE pushes back: the engagement isn't actually complete → reopen to In Progress with a reason.
+  const handleSeDispute = async (id: number): Promise<void> => {
+    setSavingId(id);
+    try {
+      const note = disputeNote.trim() ? `SE flagged not complete: ${disputeNote.trim()}` : 'SE flagged not complete';
+      await new CseRequestService(sp).updateStatus(id, 'In Progress', note);
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, requestStatus: 'In Progress', notes: note } : r));
+      setDisputeId(null); setDisputeNote('');
+    } finally { setSavingId(null); }
+  };
+
   const canCancel = (req: ICseRequest): boolean => {
     if (['Complete', 'Cancelled', 'Declined'].includes(req.requestStatus)) return false;
     if (isAdmin) return true;
@@ -490,13 +567,31 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   // 'mine' = requests I submitted (SEPrimary) OR am assigned to (RequestedCSE); 'all' = full board.
   const relevantToMe = (r: ICseRequest): boolean =>
     r.sePrimary.toLowerCase().includes(userEmail) || (r.requestedCse || '').toLowerCase().includes(userEmail);
-  const notHidden = (r: ICseRequest): boolean => isAdmin || r.requestStatus !== 'Cancelled';
+  const notHidden = (r: ICseRequest): boolean =>
+    (isAdmin || r.requestStatus !== 'Cancelled')
+    && (showSpecial || r.engagementType !== 'Special Project');   // hide CIC/Marketing unless opted in
   const visibleRequests = requests.filter(r => notHidden(r) && (viewMode === 'all' || relevantToMe(r)));
   const mineCount = requests.filter(r => notHidden(r) && relevantToMe(r)).length;
   const allCount  = requests.filter(notHidden).length;
 
-  const buOptions     = Array.from(new Set(visibleRequests.map(r => r.hpenBusinessUnit).filter(Boolean))).sort();
-  const regionOptions = Array.from(new Set(visibleRequests.map(r => r.buRegion).filter(Boolean))).sort();
+  // Geo dropdowns exclude Special-Project rows entirely — CIC/Marketing is a separate dimension,
+  // never a BU or Region. Canonicalize to Gold standard, then collapse variant duplicates.
+  const geoRows       = visibleRequests.filter(r => r.engagementType !== 'Special Project');
+  const notSpecialName = (v: string): boolean => !!v && !specialNameKeys.has(normKey(v));
+  const buOptions     = dedupeByKey(geoRows.map(r => geo.bu(r.hpenBusinessUnit)).filter(notSpecialName));
+  const regionOptions = dedupeByKey(geoRows.map(r => geo.region(r.buRegion)).filter(notSpecialName));
+  // Special-Project dimension — its own Category → Initiative cascade (shown only when opted in).
+  const specialRows        = visibleRequests.filter(r => r.engagementType === 'Special Project');
+  // Categories: everything defined in config UNION anything present in the data.
+  const specialCatOptions  = dedupeByKey([...Object.keys(spConfig), ...specialRows.map(r => r.specialProjectCategory || '')].filter(Boolean));
+  // Initiatives for the chosen category: the configured list UNION any that appear in the data.
+  const cfgCatKey          = Object.keys(spConfig).find(k => normKey(k) === normKey(filterSpecialCat));
+  const specialInitOptions = dedupeByKey([
+    ...(cfgCatKey ? (spConfig[cfgCatKey] || []) : []),
+    ...specialRows
+      .filter(r => filterSpecialCat === 'All' || normKey(r.specialProjectCategory || '') === normKey(filterSpecialCat))
+      .map(r => r.specialProjectInitiative || ''),
+  ].filter(Boolean));
 
   const tileFiltered = (() => {
     if (!activeTile) return visibleRequests;
@@ -512,14 +607,20 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   })();
 
   const isStrategicReq = (r: ICseRequest): boolean => r.engagementType === 'Strategic Engagement';
-  const reqType = (r: ICseRequest): string => isStrategicReq(r) ? 'Strategic' : 'POC';
+  const isSpecialReq = (r: ICseRequest): boolean => r.engagementType === 'Special Project';
+  const reqType = (r: ICseRequest): string => isSpecialReq(r) ? 'Special' : isStrategicReq(r) ? 'Strategic' : 'POC';
   // Shared filter-bar predicate — applied to EVERY section, not just Active.
   const matchesFilters = (r: ICseRequest): boolean => {
     if (filterStatus !== 'All' && r.requestStatus !== filterStatus) return false;
-    if (filterBU !== 'All' && r.hpenBusinessUnit !== filterBU) return false;
-    if (filterRegion !== 'All' && r.buRegion !== filterRegion) return false;
+    if (filterBU !== 'All' && normKey(geo.bu(r.hpenBusinessUnit)) !== normKey(filterBU)) return false;
+    if (filterRegion !== 'All' && normKey(geo.region(r.buRegion)) !== normKey(filterRegion)) return false;
     if (filterPriority !== 'All' && r.csePriority !== filterPriority) return false;
     if (filterType !== 'All' && reqType(r) !== filterType) return false;
+    if (filterSpecialCat !== 'All') {
+      if (!isSpecialReq(r)) return false;
+      if (normKey(r.specialProjectCategory || '') !== normKey(filterSpecialCat)) return false;
+      if (filterSpecialInit !== 'All' && normKey(r.specialProjectInitiative || '') !== normKey(filterSpecialInit)) return false;
+    }
     if (filterSearch && !r.customerName.toLowerCase().includes(filterSearch.toLowerCase())) return false;
     return true;
   };
@@ -614,6 +715,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       : (parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || 'the SE');
     const colSpan       = 12 + (showActionsCol ? 1 : 0) + (isAdmin ? 1 : 0);
     const isStrat       = isStrategicReq(req);
+    const isSpec        = isSpecialReq(req);
+    const canEditSpecial = isSpec && (isAdmin || isSSE || isAssignedSse);
+    const spCfgKey      = isSpec ? Object.keys(spConfig).find(k => normKey(k) === normKey(req.specialProjectCategory || '')) : undefined;
+    const spInits       = spCfgKey ? (spConfig[spCfgKey] || []) : [];
     const purposeText   = req.engagementPurpose === 'Other' ? (req.engagementPurposeOther || 'Other') : (req.engagementPurpose || '');
     const durationText  = req.remoteDuration || req.onsiteDuration || '';
     const rowBg         = selectedIds.has(req.id!) ? '#ffe9e9' : isExpanded ? '#f0ebff' : isCancelled ? '#f8f8f8' : i % 2 === 0 ? '#fff' : '#faf9f8';
@@ -633,12 +738,17 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         )}
         <td style={{ ...TD, opacity: isCancelled ? 0.6 : 1 }}>
           <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
-            background: isStrat ? '#e8f5e9' : '#ebf3fc', color: isStrat ? '#1a6b2e' : HPE_NAVY }}>
-            {isStrat ? '🎯 Strategic' : '🔬 POC'}
+            background: isSpec ? '#fff4ce' : isStrat ? '#e8f5e9' : '#ebf3fc', color: isSpec ? '#8a6000' : isStrat ? '#1a6b2e' : HPE_NAVY }}>
+            {isSpec ? '⭐ Special' : isStrat ? '🎯 Strategic' : '🔬 POC'}
           </span>
           {isStrat && (purposeText || durationText) && (
             <div style={{ fontSize: 10, color: '#888', marginTop: 3, maxWidth: 150 }}>
               {purposeText}{purposeText && durationText ? ' · ' : ''}{durationText}
+            </div>
+          )}
+          {isSpec && (req.specialProjectCategory || req.specialProjectInitiative) && (
+            <div style={{ fontSize: 10, color: '#888', marginTop: 3, maxWidth: 150 }}>
+              {req.specialProjectCategory}{req.specialProjectCategory && req.specialProjectInitiative ? ' · ' : ''}{req.specialProjectInitiative}
             </div>
           )}
         </td>
@@ -659,8 +769,37 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           {req.sedEmail && <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{emailToName(req.sedEmail)}</div>}
         </td>
         <td style={TD}>
-          <div>{req.hpenBusinessUnit}</div>
-          <div style={{ fontSize: 11, color: '#888' }}>{req.buRegion}</div>
+          {isSpec ? (
+            <>
+              <div style={{ color: '#8a6000', fontWeight: 600 }}>⭐ {req.specialProjectCategory || 'Special Project'}</div>
+              {editInitId === req.id ? (
+                <div onClick={e => e.stopPropagation()} style={{ marginTop: 3, display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <input list={`init-${req.id}`} value={editInitVal} autoFocus placeholder="Initiative"
+                    onChange={e => setEditInitVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveInitiative(req).catch(() => undefined); if (e.key === 'Escape') { setEditInitId(null); setEditInitVal(''); } }}
+                    style={{ fontSize: 11, padding: '2px 5px', border: '1px solid #0078d4', borderRadius: 3, width: 108 }} />
+                  <datalist id={`init-${req.id}`}>{spInits.map(i => <option key={i} value={i} />)}</datalist>
+                  <button onClick={() => handleSaveInitiative(req).catch(() => undefined)} disabled={savingId === req.id}
+                    style={{ fontSize: 10, padding: '2px 6px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>✓</button>
+                  <button onClick={() => { setEditInitId(null); setEditInitVal(''); }}
+                    style={{ fontSize: 10, padding: '2px 5px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>✕</button>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>
+                  {req.specialProjectInitiative || <span style={{ fontStyle: 'italic', color: '#bbb' }}>no initiative</span>}
+                  {canEditSpecial && (
+                    <button title="Set initiative" onClick={e => { e.stopPropagation(); setEditInitId(req.id!); setEditInitVal(req.specialProjectInitiative || ''); }}
+                      style={{ marginLeft: 6, fontSize: 10, padding: '0 5px', background: '#fff', color: HPE_NAVY, border: `1px solid ${HPE_NAVY}`, borderRadius: 3, cursor: 'pointer' }}>✎</button>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div>{geo.bu(req.hpenBusinessUnit)}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>{geo.region(req.buRegion)}</div>
+            </>
+          )}
         </td>
         <td style={{ ...TD, fontSize: 11, maxWidth: 160, cursor: isAdmin && editSolId !== req.id ? 'pointer' : 'default' }}
             title={isAdmin && editSolId !== req.id ? 'Click to edit solutions' : undefined}
@@ -754,8 +893,36 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             ) : isAdmin ? (
               <button onClick={() => { setSignOffId(req.id!); setSignOffName(''); }}
                 style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>Sign Off</button>
+            ) : isSePrimary ? (
+              disputeId === req.id ? (
+                <div>
+                  <input type="text" value={disputeNote} onChange={e => setDisputeNote(e.target.value)} placeholder="What's still outstanding?" autoFocus
+                    style={{ width: '100%', fontSize: 11, padding: '3px 6px', border: '1px solid #ccc', borderRadius: 3, marginBottom: 4, boxSizing: 'border-box' }} />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button disabled={savingId === req.id} onClick={() => handleSeDispute(req.id!).catch(() => undefined)}
+                      style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}>
+                      {savingId === req.id ? '…' : 'Reopen'}
+                    </button>
+                    <button onClick={() => { setDisputeId(null); setDisputeNote(''); }}
+                      style={{ flex: 1, fontSize: 11, padding: '3px 0', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <button disabled={savingId === req.id} onClick={() => handleSeVerify(req).catch(() => undefined)}
+                    title="Confirm this engagement is complete — your verification is the sign-off"
+                    style={{ fontSize: 11, padding: '3px 10px', background: '#e8faf3', color: '#107c10', border: '1px solid #107c10', borderRadius: 4, cursor: savingId === req.id ? 'wait' : 'pointer', fontWeight: 600 }}>
+                    {savingId === req.id ? '…' : '✓ Verify Complete'}
+                  </button>
+                  <button onClick={() => { setDisputeId(req.id!); setDisputeNote(''); }}
+                    title="This isn't finished — send it back to In Progress"
+                    style={{ fontSize: 10, padding: 0, background: 'none', color: '#a4262c', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                    ✕ Not complete
+                  </button>
+                </div>
+              )
             ) : (
-              <span style={{ fontSize: 11, color: '#8a6000' }}>Pending</span>
+              <span style={{ fontSize: 11, color: '#8a6000' }}>Awaiting SE</span>
             )
           ) : (
             <span style={{ fontSize: 11, color: '#aaa' }}>—</span>
@@ -1150,6 +1317,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       )}
 
       {showAdmin && <SrtAdminPanel sp={sp} context={context} onClose={() => setShowAdmin(false)} />}
+      {showNewSpecial && (
+        <NewSpecialProjectModal sp={sp} context={context}
+          onClose={() => setShowNewSpecial(false)}
+          onCreated={() => new CseRequestService(sp).getAll().then(all => setRequests(all)).catch(() => undefined)} />
+      )}
 
       {/* URL action result banner */}
       {urlActionBanner && (
@@ -1181,6 +1353,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           {/* Create actions (green) */}
           <a href={`${FRONT_DOOR_URL}?form=strategic`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New SSE Request</a>
           <a href={`${POC_HOME_URL}?new=1`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New POC</a>
+          {(isAdmin || isSED || isSSE) && <button onClick={() => setShowNewSpecial(true)} style={HDR_GREEN}>⭐ New Special Project</button>}
           <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.25)' }} />
           {/* Navigation (outline) */}
           <a href={POC_HOME_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>POC Manager</a>
@@ -1321,8 +1494,31 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <option value="Strategic">🎯 Strategic</option>
             <option value="POC">🔬 POC</option>
           </select>
-          {(activeTile || filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterType !== 'All' || filterSearch) && (
-            <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterType('All'); setFilterSearch(''); }}
+          {/* Special Projects (CIC / Marketing) — a separate, opt-in dimension; off by default for SEs */}
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#605e5c', padding: '0 4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={showSpecial}
+              onChange={e => { const v = e.target.checked; setShowSpecial(v); if (!v) { setFilterSpecialCat('All'); setFilterSpecialInit('All'); } }}
+              style={{ accentColor: '#8a6000' }} />
+            ⭐ Special Projects
+          </label>
+          {showSpecial && (
+            <>
+              <select value={filterSpecialCat} onChange={e => { setFilterSpecialCat(e.target.value); setFilterSpecialInit('All'); }}
+                style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #d0a000', borderRadius: 4, background: '#fffdf5' }}>
+                <option value="All">All Categories</option>
+                {specialCatOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {filterSpecialCat !== 'All' && (
+                <select value={filterSpecialInit} onChange={e => setFilterSpecialInit(e.target.value)}
+                  style={{ fontSize: 12, padding: '5px 8px', border: '1px solid #d0a000', borderRadius: 4, background: '#fffdf5' }}>
+                  <option value="All">All Initiatives</option>
+                  {specialInitOptions.map(i => <option key={i} value={i}>{i}</option>)}
+                </select>
+              )}
+            </>
+          )}
+          {(activeTile || filterStatus !== 'All' || filterBU !== 'All' || filterRegion !== 'All' || filterPriority !== 'All' || filterType !== 'All' || filterSpecialCat !== 'All' || filterSearch) && (
+            <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterType('All'); setFilterSpecialCat('All'); setFilterSpecialInit('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
             </button>

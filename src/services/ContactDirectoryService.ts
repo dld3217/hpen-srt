@@ -63,11 +63,14 @@ export class ContactDirectoryService {
   async getAll(): Promise<IContact[]> {
     try {
       const sp = spfi(SITE_URL).using(SPFx(this.context));
-      const items: { Id: number; Title: string; Email: string; Category: string; BusinessUnit: string; Geography: string; POCSolutions: string; Phone: string }[] =
-        await sp.web.lists.getByTitle(LIST_NAME).items
-          .select('Id', 'Title', 'Email', 'Category', 'BusinessUnit', 'Geography', 'POCSolutions', 'Phone')
-          .orderBy('Title', true)
-          .top(500)();
+      // Page fully so an org-wide Contact Directory over the page size isn't truncated.
+      // Requires Title (sort) indexed on the Contacts list.
+      const items: { Id: number; Title: string; Email: string; Category: string; BusinessUnit: string; Geography: string; POCSolutions: string; Phone: string }[] = [];
+      const q = sp.web.lists.getByTitle(LIST_NAME).items
+        .select('Id', 'Title', 'Email', 'Category', 'BusinessUnit', 'Geography', 'POCSolutions', 'Phone')
+        .orderBy('Title', true)
+        .top(2000);
+      for await (const page of q) items.push(...page);
       return items.map(i => ({
         id: i.Id,
         name: i.Title || '',

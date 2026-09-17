@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
-import { ConfigService, BURegionMap, IBUConfig, ISSETeam } from '../../../services/ConfigService';
+import { ConfigService, BURegionMap, IBUConfig, ISSETeam, SpecialProjectsMap } from '../../../services/ConfigService';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface ISrtAdminPanelProps {
@@ -22,7 +22,7 @@ const TAB_BTN = (active: boolean): React.CSSProperties => ({
 });
 
 export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onClose }) => {
-  const [tab, setTab]               = useState<'users' | 'bu' | 'teams'>('users');
+  const [tab, setTab]               = useState<'users' | 'bu' | 'teams' | 'special'>('users');
   const [message, setMessage]       = useState('');
   const [msgType, setMsgType]       = useState<'ok' | 'err'>('ok');
 
@@ -57,6 +57,24 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
   const [newBuSed, setNewBuSed]     = useState('');
   const [showAddBu, setShowAddBu]   = useState(false);
 
+  // ── Special Projects (CIC / Marketing) ─────────────────────────────────────
+  const [spMap, setSpMap]           = useState<SpecialProjectsMap>({});
+  const [spLoading, setSpLoading]   = useState(true);
+  const [spSaving, setSpSaving]     = useState(false);
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [editCat, setEditCat]       = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState('');
+  const [newInit, setNewInit]       = useState<Record<string, string>>({});
+  const [editInit, setEditInit]     = useState<{ cat: string; idx: number } | null>(null);
+  const [editInitName, setEditInitName] = useState('');
+
+  // ── SRT SSEs (may create Special Projects) ─────────────────────────────────
+  const [sseList, setSseList]       = useState<string[]>([]);
+  const [sseLoading, setSseLoading] = useState(true);
+  const [sseSaving, setSseSaving]   = useState(false);
+  const [newSseEmail, setNewSseEmail] = useState('');
+
   // ── PDL Lookup ───────────────────────────────────────────────────────────
   const [pdlEmail, setPdlEmail]     = useState('');
   const [pdlResults, setPdlResults] = useState<IPdlMember[]>([]);
@@ -84,6 +102,12 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
     configSvc.getSEDApprovalRequired()
       .then(r => setSedApprovalRequired(r))
       .catch(() => undefined);
+    configSvc.getSpecialProjects()
+      .then(m => { setSpMap(m); setSpLoading(false); })
+      .catch(() => setSpLoading(false));
+    configSvc.getSSEs()
+      .then(u => { setSseList(u); setSseLoading(false); })
+      .catch(() => setSseLoading(false));
   }, []);
 
   // ── Super User actions ────────────────────────────────────────────────────
@@ -192,6 +216,100 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
     saveTeams(sseTeams.filter((_, i) => i !== idx)).catch(() => undefined);
   };
 
+  // ── Special Projects actions ────────────────────────────────────────────────
+  const saveSp = async (updated: SpecialProjectsMap): Promise<void> => {
+    setSpSaving(true);
+    try {
+      await configSvc.saveSpecialProjects(updated);
+      setSpMap(updated);
+      showMsg('Special Projects saved.', 'ok');
+    } catch (e) {
+      showMsg(`Save failed: ${(e as Error).message}`, 'err');
+    } finally { setSpSaving(false); }
+  };
+
+  const addCategory = (): void => {
+    const name = newCatName.trim();
+    if (!name) return;
+    if (Object.keys(spMap).some(c => c.toLowerCase() === name.toLowerCase())) {
+      showMsg('That category already exists.', 'err'); return;
+    }
+    saveSp({ ...spMap, [name]: [] }).catch(() => undefined);
+    setNewCatName(''); setShowAddCat(false);
+  };
+
+  const commitCatRename = (): void => {
+    if (!editCat) return;
+    const name = editCatName.trim();
+    if (!name || name === editCat) { setEditCat(null); return; }
+    if (Object.keys(spMap).some(c => c !== editCat && c.toLowerCase() === name.toLowerCase())) {
+      showMsg('A category with that name already exists.', 'err'); return;
+    }
+    // Rebuild preserving insertion order, swapping the renamed key.
+    const updated: SpecialProjectsMap = {};
+    for (const [c, inits] of Object.entries(spMap)) updated[c === editCat ? name : c] = inits;
+    saveSp(updated).catch(() => undefined);
+    setEditCat(null);
+  };
+
+  const retireCategory = (cat: string): void => {
+    if (!window.confirm(`Retire "${cat}" from the picker? Existing records keep their values; this only removes it from the dropdown going forward.`)) return;
+    const updated = { ...spMap }; delete updated[cat];
+    saveSp(updated).catch(() => undefined);
+  };
+
+  const addInitiative = (cat: string): void => {
+    const name = (newInit[cat] || '').trim();
+    if (!name) return;
+    const existing = spMap[cat] || [];
+    if (existing.some(i => i.toLowerCase() === name.toLowerCase())) {
+      setNewInit({ ...newInit, [cat]: '' }); return;   // already present — dedup silently
+    }
+    saveSp({ ...spMap, [cat]: [...existing, name] }).catch(() => undefined);
+    setNewInit({ ...newInit, [cat]: '' });
+  };
+
+  const commitInitRename = (): void => {
+    if (!editInit) return;
+    const { cat, idx } = editInit;
+    const name = editInitName.trim();
+    const list = spMap[cat] || [];
+    if (!name) { setEditInit(null); return; }
+    // Renaming onto an existing sibling (case-insensitive) MERGES — collapse the duplicate.
+    const dup = list.some((i, k) => k !== idx && i.toLowerCase() === name.toLowerCase());
+    const updatedList = dup ? list.filter((_, k) => k !== idx) : list.map((i, k) => k === idx ? name : i);
+    saveSp({ ...spMap, [cat]: updatedList }).catch(() => undefined);
+    setEditInit(null);
+  };
+
+  const removeInitiative = (cat: string, idx: number): void => {
+    const list = spMap[cat] || [];
+    saveSp({ ...spMap, [cat]: list.filter((_, k) => k !== idx) }).catch(() => undefined);
+  };
+
+  // ── SRT SSEs actions ────────────────────────────────────────────────────────
+  const saveSses = async (users: string[]): Promise<void> => {
+    setSseSaving(true);
+    try {
+      await configSvc.saveSSEs(users);
+      setSseList(users);
+      showMsg('SSE list saved.', 'ok');
+    } catch (e) {
+      showMsg(`Save failed: ${(e as Error).message}`, 'err');
+    } finally { setSseSaving(false); }
+  };
+
+  const addSse = (): void => {
+    const email = newSseEmail.trim().toLowerCase();
+    if (!email || sseList.includes(email)) return;
+    saveSses([...sseList, email]).catch(() => undefined);
+    setNewSseEmail('');
+  };
+
+  const removeSse = (email: string): void => {
+    saveSses(sseList.filter(u => u !== email)).catch(() => undefined);
+  };
+
   // ── PDL Lookup ────────────────────────────────────────────────────────────
   const handlePdlLookup = async (): Promise<void> => {
     if (!pdlEmail.trim()) return;
@@ -254,6 +372,7 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
           <button style={TAB_BTN(tab === 'users')} onClick={() => setTab('users')}>Super Users</button>
           <button style={TAB_BTN(tab === 'bu')} onClick={() => setTab('bu')}>BU Config</button>
           <button style={TAB_BTN(tab === 'teams')} onClick={() => setTab('teams')}>SSE Teams</button>
+          <button style={TAB_BTN(tab === 'special')} onClick={() => setTab('special')}>⭐ Special</button>
         </div>
 
         {/* Message bar */}
@@ -557,6 +676,151 @@ export const SrtAdminPanel: React.FC<ISrtAdminPanelProps> = ({ sp, context, onCl
                               </span>
                             </div>
                           )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Special Projects tab ── */}
+          {tab === 'special' && (
+            <>
+              {/* Who can create Special Projects */}
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 4 }}>
+                SSEs — can create Special Projects
+              </div>
+              <p style={{ fontSize: 11, color: '#605e5c', margin: '0 0 8px' }}>
+                These SSEs get the <strong>⭐ New Special Project</strong> button on the dashboard. Admins and SEDs always have it.
+              </p>
+              {sseLoading ? <div style={{ color: '#888', fontSize: 13 }}>Loading…</div> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {sseList.map(email => (
+                    <div key={email} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#faf9f8', border: '1px solid #edebe9', borderRadius: 4 }}>
+                      <span style={{ flex: 1, fontSize: 13 }}>{email}</span>
+                      <button onClick={() => removeSse(email)} disabled={sseSaving}
+                        style={{ background: 'none', border: 'none', color: '#d13438', fontSize: 16, cursor: 'pointer', lineHeight: 1, padding: '2px 4px' }} title="Remove">✕</button>
+                    </div>
+                  ))}
+                  {sseList.length === 0 && <div style={{ color: '#aaa', fontSize: 13, fontStyle: 'italic' }}>No SSEs added yet — only admins/SEDs can create Special Projects.</div>}
+                </div>
+              )}
+              <div style={{ marginTop: 10, marginBottom: 22, paddingBottom: 16, borderBottom: '1px solid #edebe9', display: 'flex', gap: 8 }}>
+                <input type="email" placeholder="sse@hpe.com" value={newSseEmail}
+                  onChange={e => setNewSseEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addSse(); }}
+                  style={{ flex: 1, fontSize: 13, padding: '6px 10px', border: '1px solid #ccc', borderRadius: 4 }} />
+                <button onClick={addSse} disabled={sseSaving || !newSseEmail.trim()}
+                  style={{ padding: '6px 16px', background: HPE_NAVY, color: '#fff', border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: sseSaving || !newSseEmail.trim() ? 'not-allowed' : 'pointer', opacity: sseSaving || !newSseEmail.trim() ? 0.6 : 1 }}>
+                  {sseSaving ? '…' : 'Add'}
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: '#605e5c', marginTop: 0 }}>
+                Non-geo engagements — CICs (Houston, San Jose…) and Marketing — that SSEs are pulled into
+                across regions. Tracked by <strong>Category → Initiative</strong>; they never roll up into
+                geo BU/Region reporting. Requesters can add a new initiative on the fly, and it appears here
+                for you to rename, merge, or retire.
+              </p>
+              <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Categories &amp; Initiatives</span>
+                <button onClick={() => setShowAddCat(v => !v)}
+                  style={{ fontSize: 11, padding: '3px 10px', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>
+                  + Add Category
+                </button>
+              </div>
+
+              {showAddCat && (
+                <div style={{ marginBottom: 12, padding: '12px 14px', background: '#f0f9f4', border: `1px solid ${HPE_GREEN}`, borderRadius: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>New Category</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input placeholder="e.g. Austin CIC" value={newCatName}
+                      onChange={e => setNewCatName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') addCategory(); }}
+                      style={{ flex: 1, fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
+                    <button onClick={addCategory} disabled={!newCatName.trim() || spSaving}
+                      style={{ padding: '5px 14px', background: HPE_GREEN, color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {spSaving ? '…' : 'Add'}
+                    </button>
+                    <button onClick={() => { setShowAddCat(false); setNewCatName(''); }}
+                      style={{ padding: '5px 10px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {spLoading ? <div style={{ color: '#888', fontSize: 13 }}>Loading…</div> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Object.keys(spMap).length === 0 && <div style={{ color: '#aaa', fontSize: 13, fontStyle: 'italic' }}>No categories yet.</div>}
+                  {Object.keys(spMap).map(cat => {
+                    const inits = spMap[cat] || [];
+                    const isEditingCat = editCat === cat;
+                    return (
+                      <div key={cat} style={{ border: '1px solid #edebe9', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ padding: '10px 12px', background: '#f3f2f1', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {isEditingCat ? (
+                            <>
+                              <input value={editCatName} onChange={e => setEditCatName(e.target.value)} autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter') commitCatRename(); }}
+                                style={{ flex: 1, fontSize: 13, padding: '4px 8px', border: '1px solid #0078d4', borderRadius: 4 }} />
+                              <button onClick={commitCatRename} disabled={spSaving}
+                                style={{ padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                              <button onClick={() => setEditCat(null)}
+                                style={{ padding: '4px 8px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>✕</button>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700 }}>⭐ {cat}</div>
+                                <div style={{ fontSize: 11, color: '#888' }}>{inits.length} initiative{inits.length !== 1 ? 's' : ''}</div>
+                              </div>
+                              <button onClick={() => { setEditCat(cat); setEditCatName(cat); }}
+                                style={{ fontSize: 11, padding: '3px 10px', background: '#fff', color: HPE_NAVY, border: `1px solid ${HPE_NAVY}`, borderRadius: 3, cursor: 'pointer' }}>Rename</button>
+                              <button onClick={() => retireCategory(cat)} disabled={spSaving}
+                                style={{ background: 'none', border: 'none', color: '#d13438', fontSize: 16, cursor: 'pointer', lineHeight: 1, padding: '2px 4px' }}
+                                title="Retire category">✕</button>
+                            </>
+                          )}
+                        </div>
+                        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {inits.length === 0 && <div style={{ fontSize: 11, color: '#aaa', fontStyle: 'italic' }}>No initiatives yet.</div>}
+                          {inits.map((init, idx) => {
+                            const isEditingInit = !!editInit && editInit.cat === cat && editInit.idx === idx;
+                            return (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                {isEditingInit ? (
+                                  <>
+                                    <input value={editInitName} onChange={e => setEditInitName(e.target.value)} autoFocus
+                                      onKeyDown={e => { if (e.key === 'Enter') commitInitRename(); }}
+                                      style={{ flex: 1, fontSize: 12, padding: '4px 8px', border: '1px solid #0078d4', borderRadius: 4 }} />
+                                    <button onClick={commitInitRename} disabled={spSaving}
+                                      style={{ padding: '4px 10px', background: '#107c10', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                                    <button onClick={() => setEditInit(null)}
+                                      style={{ padding: '4px 8px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>✕</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span style={{ flex: 1, fontSize: 12, padding: '3px 10px', background: '#eef4fa', border: '1px solid #dbeafe', borderRadius: 12, color: '#1e3a5f' }}>{init}</span>
+                                    <button onClick={() => { setEditInit({ cat, idx }); setEditInitName(init); }}
+                                      style={{ fontSize: 11, padding: '2px 8px', background: '#fff', color: HPE_NAVY, border: `1px solid ${HPE_NAVY}`, borderRadius: 3, cursor: 'pointer' }}>Rename</button>
+                                    <button onClick={() => removeInitiative(cat, idx)} disabled={spSaving}
+                                      style={{ background: 'none', border: 'none', color: '#d13438', fontSize: 15, cursor: 'pointer', lineHeight: 1, padding: '2px 4px' }}
+                                      title="Remove initiative">✕</button>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                            <input placeholder="+ Add initiative" value={newInit[cat] || ''}
+                              onChange={e => setNewInit({ ...newInit, [cat]: e.target.value })}
+                              onKeyDown={e => { if (e.key === 'Enter') addInitiative(cat); }}
+                              style={{ flex: 1, fontSize: 12, padding: '5px 8px', border: '1px solid #ccc', borderRadius: 4 }} />
+                            <button onClick={() => addInitiative(cat)} disabled={!(newInit[cat] || '').trim() || spSaving}
+                              style={{ padding: '5px 12px', background: HPE_NAVY, color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Add</button>
+                          </div>
                         </div>
                       </div>
                     );
