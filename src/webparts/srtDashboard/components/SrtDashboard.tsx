@@ -178,6 +178,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [savingNotes, setSavingNotes]             = useState(false);
   const [blockDraft, setBlockDraft]               = useState<IScheduleBlock[]>([]);
   const [savingBlocks, setSavingBlocks]           = useState(false);
+  const [blockMsg, setBlockMsg]                   = useState<{ ok: boolean; text: string } | null>(null);
   const [urlActionBanner, setUrlActionBanner]     = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
   const [buRegionsCfg, setBuRegionsCfg]           = useState<BURegionMap>({});
@@ -340,6 +341,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setDrawerOpportunity('');
       setDrawerNotes('');
       setBlockDraft([]);
+      setBlockMsg(null);
     } else {
       setExpandedId(req.id!);
       setDateEdit({
@@ -356,6 +358,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setDrawerOpportunity(req.opportunity || '');
       setDrawerNotes(req.notes || '');
       setBlockDraft(req.scheduleBlocks || []);
+      setBlockMsg(null);
       // Default the proposer to the effective role; admins can override before saving.
       setProposeAs((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
       setDeclineDatesId(null);
@@ -375,10 +378,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   };
 
   const handleSaveBlocks = async (id: number): Promise<void> => {
-    setSavingBlocks(true);
+    setSavingBlocks(true); setBlockMsg(null);
     try {
       await new CseRequestService(sp).updateScheduleBlocks(id, blockDraft);
       setRequests(prev => prev.map(r => r.id === id ? { ...r, scheduleBlocks: blockDraft } : r));
+      setBlockMsg({ ok: true, text: `✓ Saved ${blockDraft.length} block${blockDraft.length !== 1 ? 's' : ''}.` });
+    } catch (e) {
+      setBlockMsg({ ok: false, text: `Save failed: ${(e as Error).message}` });
     } finally { setSavingBlocks(false); }
   };
 
@@ -1218,7 +1224,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e6ddf5' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🗓️ Schedule &amp; Time</div>
               <ScheduleBlockEditor blocks={blockDraft} onChange={setBlockDraft} showAccounting={true} showDemo={isAdmin} />
-              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
+                {blockMsg && <span style={{ fontSize: 11, fontWeight: 600, color: blockMsg.ok ? '#107c10' : '#a4262c' }}>{blockMsg.text}</span>}
                 <button disabled={savingBlocks} onClick={() => handleSaveBlocks(req.id!).catch(() => undefined)}
                   style={{ padding: '5px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingBlocks ? 0.6 : 1 }}>
                   {savingBlocks ? 'Saving…' : 'Save Schedule'}
