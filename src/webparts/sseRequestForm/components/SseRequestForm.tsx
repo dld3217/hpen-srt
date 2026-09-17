@@ -8,6 +8,8 @@ import { ConfigService, BURegionMap, IBUConfig, IRegionConfig, ISSETeam } from '
 import { ContactDirectoryService, IContact } from '../../../services/ContactDirectoryService';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ISseCommitment } from '../../../models/ICseRequest';
+import { IScheduleBlock } from '../../../models/ScheduleBlock';
+import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
@@ -32,6 +34,7 @@ interface ISseFormData {
   onsiteEnd: string;
   onsiteDuration: string;
   onsiteDestination: string;
+  scheduleBlocks: IScheduleBlock[];
   opportunity: string;
   notes: string;
   csePriority: string;
@@ -62,6 +65,7 @@ const EMPTY_FORM: ISseFormData = {
   onsiteEnd: '',
   onsiteDuration: '',
   onsiteDestination: '',
+  scheduleBlocks: [],
   opportunity: '',
   notes: '',
   csePriority: '',
@@ -232,90 +236,6 @@ const PeoplePickerField: React.FC<{
   );
 };
 
-// ── Schedule Block ────────────────────────────────────────────────────────────
-
-const calcDuration = (start: string, end: string): string => {
-  if (!start || !end) return '';
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  if (ms <= 0) return '';
-  const totalMinutes = Math.round(ms / 60000);
-  const days  = Math.floor(totalMinutes / (60 * 24));
-  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-  const mins  = totalMinutes % 60;
-  const parts: string[] = [];
-  if (days  > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
-  if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
-  if (mins  > 0 && days === 0) parts.push(`${mins} min`);
-  return parts.join(' ');
-};
-
-const ScheduleBlock: React.FC<{
-  label: string;
-  tbd: boolean;
-  start: string;
-  end: string;
-  duration: string;
-  destination?: string;
-  dateOnly?: boolean;
-  onTbd: (v: boolean) => void;
-  onStart: (v: string) => void;
-  onEnd: (v: string) => void;
-  onDuration: (v: string) => void;
-  onDestination?: (v: string) => void;
-}> = ({ label, tbd, start, end, duration, destination, dateOnly, onTbd, onStart, onEnd, onDuration, onDestination }) => {
-  const toInput = (iso: string): string => {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '';
-      if (dateOnly) return d.toLocaleDateString('sv');
-      return d.toLocaleDateString('sv') + 'T' + d.toLocaleTimeString('sv').substring(0, 5);
-    } catch { return ''; }
-  };
-  const fromInput = (val: string): string => val ? new Date(val).toISOString() : '';
-  return (
-    <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', margin: 0 }}>
-          <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
-          Dates TBD
-        </label>
-      </div>
-      {!tbd && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 8 }}>
-          <div>
-            <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Start</label>
-            <input type={dateOnly ? 'date' : 'datetime-local'} value={toInput(start)}
-              onChange={e => { const s = fromInput(e.target.value); onStart(s); if (s && end) onDuration(calcDuration(s, end)); }} style={INPUT} />
-          </div>
-          <div>
-            <label style={{ ...LABEL_STYLE, fontSize: 11 }}>End</label>
-            <input type={dateOnly ? 'date' : 'datetime-local'} value={toInput(end)}
-              onChange={e => { const en = fromInput(e.target.value); onEnd(en); if (start && en) onDuration(calcDuration(start, en)); }} style={INPUT} />
-          </div>
-          <button type="button" onClick={() => { onTbd(true); onStart(''); onEnd(''); onDuration(''); }}
-            title="Clear dates"
-            style={{ height: 32, padding: '0 10px', fontSize: 16, lineHeight: 1, background: 'transparent',
-              border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c', marginBottom: 1 }}>✕</button>
-        </div>
-      )}
-      <div>
-        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
-        <input type="text" value={duration} onChange={e => onDuration(e.target.value)}
-          placeholder="e.g. 2 hours, half day, 3 days" style={INPUT} />
-      </div>
-      {onDestination !== undefined && (
-        <div style={{ marginTop: 8 }}>
-          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Destination</label>
-          <input type="text" value={destination || ''} onChange={e => onDestination(e.target.value)}
-            placeholder="e.g. Denver, CO" style={INPUT} />
-        </div>
-      )}
-    </div>
-  );
-};
-
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) => {
@@ -336,7 +256,6 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   const [dismissedIds, setDismissedIds]           = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds]             = useState<Set<number>>(new Set());
   const [commitments, setCommitments]             = useState<ISseCommitment[]>([]);
-  const [commitLoading, setCommitLoading]         = useState(false);
 
   const userEmail       = context.pageContext.user.email;
   const userDisplayName = context.pageContext.user.displayName || userEmail;
@@ -346,11 +265,9 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
   useEffect(() => {
     if (!sseEmail) { setCommitments([]); return; }
     let cancelled = false;
-    setCommitLoading(true);
     new CseRequestService(sp).getSseCommitments(sseEmail)
       .then(c => { if (!cancelled) setCommitments(c); })
-      .catch(() => { if (!cancelled) setCommitments([]); })
-      .finally(() => { if (!cancelled) setCommitLoading(false); });
+      .catch(() => { if (!cancelled) setCommitments([]); });
     return () => { cancelled = true; };
   }, [sseEmail]);
 
@@ -431,7 +348,7 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     if (!formData.hpenBusinessUnit)             errs.push('Business Unit is required.');
     if (!formData.buRegion)                     errs.push('Region is required.');
     if (!formData.requestedSse.includes('/'))   errs.push('Requested SSE is required — search and select a person.');
-    if (!formData.supportType)                  errs.push('Support Type is required.');
+    if (!formData.scheduleBlocks.length)        errs.push('Add at least one time block (Remote, Prep, or On-Site).');
     if (!formData.csePriority)                  errs.push('Priority is required.');
     if (!formData.notes.trim())                 errs.push('Notes is required.');
     return errs;
@@ -452,7 +369,12 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
       const activeTeam      = sseTeams.find(t => t.name === formData.specialtyType);
       const sedEmail        = activeTeam?.managerEmail || buSedEmail;
       const sseManagerEmail = activeTeam?.managerEmail || '';
-      const schedStatus     = (formData.remoteTbd && formData.onsiteTbd) ? 'TBD' as const : 'Dates Proposed' as const;
+      // Blocks are the model now; derive the legacy scalar summary so the accept/confirm handshake still works.
+      const blocks = formData.scheduleBlocks;
+      const datedOf = (t: string): IScheduleBlock[] => blocks.filter(b => b.type === t && !b.tbd && !!b.start).sort((a, b) => a.start < b.start ? -1 : 1);
+      const fR = datedOf('Remote')[0], fO = datedOf('On-Site')[0];
+      const derivedSupport: 'Remote' | 'On-Site' | 'Both' = (fR && fO) ? 'Both' : fO ? 'On-Site' : 'Remote';
+      const schedStatus     = (fR || fO) ? 'Dates Proposed' as const : 'TBD' as const;
 
       const basePayload = {
         source: 'SE Landing Page' as const,
@@ -464,16 +386,17 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
         csePriority: formData.csePriority,
         csePriorityReason: formData.csePriorityReason,
         solutionsFocus: formData.solutionsFocus,
-        supportType: formData.supportType,
-        remoteTbd: formData.remoteTbd,
-        remoteStart: formData.remoteStart,
-        remoteEnd: formData.remoteEnd,
-        remoteDuration: formData.remoteDuration,
-        onsiteTbd: formData.onsiteTbd,
-        onsiteStart: formData.onsiteStart,
-        onsiteEnd: formData.onsiteEnd,
-        onsiteDuration: formData.onsiteDuration,
-        onsiteDestination: formData.onsiteDestination,
+        supportType: derivedSupport,
+        remoteTbd: !fR,
+        remoteStart: fR ? fR.start : '',
+        remoteEnd: fR ? (fR.end || fR.start) : '',
+        remoteDuration: '',
+        onsiteTbd: !fO,
+        onsiteStart: fO ? fO.start : '',
+        onsiteEnd: fO ? (fO.end || fO.start) : '',
+        onsiteDuration: '',
+        onsiteDestination: fO ? fO.location : '',
+        scheduleBlocks: blocks,
         sePrimary: `${userDisplayName} / ${userEmail}`,
         semPrimary: semEmail,
         sedEmail,
@@ -828,14 +751,6 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
             style={{ ...INPUT, resize: 'vertical' }} />
         </div>
 
-        <div style={FIELD_ROW}>
-          <label style={LABEL_STYLE}>Support Type <span style={{ color: '#d13438' }}>*</span></label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['Remote', 'On-Site', 'Both'] as const).map(t => (
-              <button key={t} type="button" onClick={() => set('supportType', t)} style={TOGGLE_BTN(formData.supportType === t)}>{t}</button>
-            ))}
-          </div>
-        </div>
 
         <div style={FIELD_ROW}>
           <label style={LABEL_STYLE}>Notes <span style={{ color: '#d13438' }}>*</span></label>
@@ -845,62 +760,16 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
             style={{ ...INPUT, resize: 'vertical' }} />
         </div>
 
-        {sseEmail && ((): JSX.Element => {
-          const dstr = (iso: string): string => (iso || '').substring(0, 10);
-          const rangesOverlap = (aS: string, aE: string, bS: string, bE: string): boolean => aS <= bE && bS <= aE;
-          const proposedBlocks: Array<{ s: string; e: string }> = [];
-          if ((formData.supportType === 'Remote' || formData.supportType === 'Both') && !formData.remoteTbd && formData.remoteStart) proposedBlocks.push({ s: dstr(formData.remoteStart), e: dstr(formData.remoteEnd || formData.remoteStart) });
-          if ((formData.supportType === 'On-Site' || formData.supportType === 'Both') && !formData.onsiteTbd && formData.onsiteStart) proposedBlocks.push({ s: dstr(formData.onsiteStart), e: dstr(formData.onsiteEnd || formData.onsiteStart) });
-          const commitConflicts = (c: ISseCommitment): boolean => proposedBlocks.some(p => rangesOverlap(p.s, p.e, dstr(c.start), dstr(c.end)));
-          const anyConflict = commitments.some(commitConflicts);
-          const sseShortName = formData.requestedSse.includes('/') ? formData.requestedSse.split('/')[0].trim() : '';
-          const fmtRange = (s: string, e: string): string => { const a = dstr(s), b = dstr(e); return b && b !== a ? `${a} – ${b}` : a; };
-          return (
-            <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 6,
-              background: anyConflict ? '#fdf2f3' : '#f3f9f4',
-              border: `1px solid ${anyConflict ? '#d68a90' : '#bcdcc4'}` }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#3b3a39', marginBottom: 6 }}>
-                🗓️ {sseShortName || 'SSE'}&rsquo;s upcoming commitments
-                {commitLoading && <span style={{ fontWeight: 400, color: '#888' }}> — checking…</span>}
-              </div>
-              {!commitLoading && commitments.length === 0 && (
-                <div style={{ fontSize: 12, color: '#605e5c' }}>No confirmed on-site or remote commitments coming up. 👍</div>
-              )}
-              {!commitLoading && commitments.length > 0 && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {commitments.map((c, i) => {
-                      const clash = commitConflicts(c);
-                      return (
-                        <div key={i} style={{ fontSize: 12, color: clash ? '#a4262c' : '#323130', fontWeight: clash ? 700 : 400 }}>
-                          {c.type === 'On-site' ? '🏢' : '💻'} <strong>{fmtRange(c.start, c.end)}</strong> · {c.type}
-                          {c.location ? ` · ${c.location}` : ''}
-                          {clash && ' · ⚠️ overlaps your proposed dates'}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {anyConflict && (
-                    <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#a4262c' }}>
-                      ⚠️ Your proposed dates overlap {sseShortName || 'the SSE'}&rsquo;s existing commitment(s). Pick different dates or confirm this is intended.
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })()}
 
-        {(formData.supportType === 'Remote' || formData.supportType === 'Both') && (
-          <ScheduleBlock label="Remote Schedule" dateOnly
-            tbd={formData.remoteTbd} start={formData.remoteStart} end={formData.remoteEnd} duration={formData.remoteDuration}
-            onTbd={v => set('remoteTbd', v)} onStart={v => set('remoteStart', v)} onEnd={v => set('remoteEnd', v)} onDuration={v => set('remoteDuration', v)} />
-        )}
-        {(formData.supportType === 'On-Site' || formData.supportType === 'Both') && (
-          <ScheduleBlock label="On-Site Schedule" dateOnly
-            tbd={formData.onsiteTbd} start={formData.onsiteStart} end={formData.onsiteEnd} duration={formData.onsiteDuration} destination={formData.onsiteDestination}
-            onTbd={v => set('onsiteTbd', v)} onStart={v => set('onsiteStart', v)} onEnd={v => set('onsiteEnd', v)} onDuration={v => set('onsiteDuration', v)} onDestination={v => set('onsiteDestination', v)} />
-        )}
+        <div style={FIELD_ROW}>
+          <label style={LABEL_STYLE}>Time Coordination</label>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: '#605e5c', marginBottom: 6 }}>
+              Add the time you need — <strong>Remote</strong>, <strong>Prep</strong>, or <strong>On-Site</strong>. Each block is its own date range; overlaps with the SSE&rsquo;s existing bookings are flagged.
+            </div>
+            <ScheduleBlockEditor blocks={formData.scheduleBlocks} onChange={v => set('scheduleBlocks', v)} commitments={commitments} />
+          </div>
+        </div>
       </div>
 
       {/* Submit */}
