@@ -39,7 +39,7 @@ export const ScheduleBlockEditor: React.FC<IScheduleBlockEditorProps> = ({ block
   const add = (t: ScheduleBlockType): void => onChange([...blocks, newBlock(t)]);
   const remove = (id: string): void => onChange(blocks.filter(b => b.id !== id));
 
-  const totalDays = blocks.reduce((s, b) => s + blockDays(b), 0);
+  const totalHours = blocks.reduce((s, b) => s + plannedHours(b), 0);
 
   return (
     <div>
@@ -86,13 +86,41 @@ export const ScheduleBlockEditor: React.FC<IScheduleBlockEditorProps> = ({ block
               </label>
               {!b.tbd && (
                 <>
-                  <input type="date" value={b.start}
-                    onChange={e => update(b.id, { start: e.target.value, end: (b.end && b.end < e.target.value) ? e.target.value : b.end })}
-                    style={FLD} />
-                  <span style={{ fontSize: 11, color: '#888' }}>→</span>
-                  <input type="date" value={b.end || b.start} min={b.start}
-                    onChange={e => update(b.id, { end: e.target.value })} style={FLD} />
-                  <span style={{ fontSize: 11, color: st.color, fontWeight: 600 }}>{blockDays(b)}d</span>
+                  <div style={{ display: 'inline-flex', border: `1px solid ${st.color}`, borderRadius: 4, overflow: 'hidden' }}>
+                    {(['days', 'hours'] as const).map(u => {
+                      const active = (b.unit || 'days') === u;
+                      return (
+                        <button key={u} type="button"
+                          onClick={() => update(b.id, u === 'hours'
+                            ? { unit: 'hours', end: b.start || b.end, hours: (typeof b.hours === 'number') ? b.hours : 4 }
+                            : { unit: 'days' })}
+                          style={{ fontSize: 10, padding: '3px 8px', border: 'none', cursor: 'pointer', fontWeight: 600,
+                            background: active ? st.color : '#fff', color: active ? '#fff' : '#888' }}>
+                          {u === 'days' ? 'Days' : 'Hours'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {b.unit === 'hours' ? (
+                    <>
+                      <input type="date" value={b.start}
+                        onChange={e => update(b.id, { start: e.target.value, end: e.target.value })} style={FLD} />
+                      <input type="number" min={0} step={0.5} value={b.hours === undefined ? '' : b.hours}
+                        onChange={e => update(b.id, { hours: e.target.value === '' ? undefined : Number(e.target.value) })}
+                        placeholder="hrs" style={{ ...FLD, width: 54 }} />
+                      <span style={{ fontSize: 11, color: st.color, fontWeight: 600 }}>h</span>
+                    </>
+                  ) : (
+                    <>
+                      <input type="date" value={b.start}
+                        onChange={e => update(b.id, { start: e.target.value, end: (b.end && b.end < e.target.value) ? e.target.value : b.end })}
+                        style={FLD} />
+                      <span style={{ fontSize: 11, color: '#888' }}>→</span>
+                      <input type="date" value={b.end || b.start} min={b.start}
+                        onChange={e => update(b.id, { end: e.target.value })} style={FLD} />
+                      <span style={{ fontSize: 11, color: st.color, fontWeight: 600 }}>{blockDays(b)}d · {plannedHours(b)}h</span>
+                    </>
+                  )}
                 </>
               )}
               {b.type === 'On-Site' && (
@@ -141,8 +169,8 @@ export const ScheduleBlockEditor: React.FC<IScheduleBlockEditorProps> = ({ block
             🧪 Demo
           </button>
         )}
-        {totalDays > 0 && (
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: HPE_NAVY }}>Planned total: <strong>{totalDays}d</strong></span>
+        {totalHours > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: HPE_NAVY }}>Planned total: <strong>{totalHours}h</strong> ({+(totalHours / 8).toFixed(1)}d)</span>
         )}
       </div>
     </div>

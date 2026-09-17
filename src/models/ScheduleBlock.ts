@@ -26,6 +26,9 @@ export interface IScheduleBlock {
   // Accounting — Planned → Actual via one switch; optional hours override.
   logged: boolean;
   actualHours?: number;          // when logged & unset, actual == planned
+  // Effort unit — 'days' = date range × 8h (default), 'hours' = a specific number of hours on one day.
+  unit: 'days' | 'hours';
+  hours?: number;                // planned hours when unit === 'hours'
 }
 
 export const HOURS_PER_DAY = 8;
@@ -44,9 +47,10 @@ export function blockDays(b: IScheduleBlock): number {
   return Math.max(0, Math.round(ms / 86400000)) + 1;
 }
 
-// Planned effort in hours (days × HOURS_PER_DAY).
+// Planned effort in hours — explicit hours when unit='hours', else date-range days × 8.
 export function plannedHours(b: IScheduleBlock): number {
-  return blockDays(b) * HOURS_PER_DAY;
+  if (b.tbd) return 0;
+  return b.unit === 'hours' ? (b.hours || 0) : blockDays(b) * HOURS_PER_DAY;
 }
 
 // Actual effort: explicit override if given, else the planned figure once logged, else 0.
@@ -78,6 +82,8 @@ export function parseScheduleBlocks(json: string | undefined): IScheduleBlock[] 
     confirmed: !!b.confirmed,
     logged: !!b.logged,
     actualHours: (typeof b.actualHours === 'number') ? b.actualHours : undefined,
+    unit: b.unit === 'hours' ? 'hours' : 'days',
+    hours: (typeof b.hours === 'number') ? b.hours : undefined,
   }));
 }
 
@@ -86,12 +92,12 @@ export function parseScheduleBlocks(json: string | undefined): IScheduleBlock[] 
 export function demoScheduleBlocks(): IScheduleBlock[] {
   const p2 = (n: number): string => (n < 10 ? '0' + n : '' + n);
   const d = (off: number): string => { const t = new Date(); t.setDate(t.getDate() + off); return `${t.getFullYear()}-${p2(t.getMonth() + 1)}-${p2(t.getDate())}`; };
-  const mk = (type: ScheduleBlockType, s: number, e: number, label: string, location = '', logged = false): IScheduleBlock =>
-    ({ ...newBlock(type), tbd: false, start: d(s), end: d(e), label, location, logged });
+  const mk = (type: ScheduleBlockType, s: number, e: number, label: string, location = '', logged = false, hours?: number): IScheduleBlock =>
+    ({ ...newBlock(type), tbd: false, start: d(s), end: hours !== undefined ? d(s) : d(e), label, location, logged, unit: hours !== undefined ? 'hours' : 'days', hours });
   return [
     mk('On-Site', -7, -5, 'Initial discovery visit', 'Customer HQ', true),  // last week — logged (actual)
     mk('Remote',   4,  5, 'Design review'),
-    mk('Prep',    10, 11, 'Lab build + exec deck'),
+    mk('Prep',    10, 10, 'Exec deck prep', '', false, 4),                   // hours block — a 4-hour planning slot
     mk('On-Site', 14, 16, 'Solution deep-dive', 'Customer HQ'),
     mk('On-Site', 35, 36, 'Executive readout', 'Customer HQ'),             // second visit, weeks later
   ];
@@ -104,5 +110,6 @@ export function newBlock(type: ScheduleBlockType): IScheduleBlock {
     id: 'b' + new Date().getTime().toString(36) + '-' + _seq.toString(36),
     type, start: '', end: '', location: '', label: '', tbd: true,
     proposedBy: '', confirmed: false, logged: false, actualHours: undefined,
+    unit: 'days', hours: undefined,
   };
 }
