@@ -12,6 +12,7 @@ import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHED
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { DISPOSITION_STYLE, IEnvironmentRow } from '../../../models/StrategicEngagement';
 import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
+import { AvailabilityCalendar } from '../../../components/AvailabilityCalendar';
 import { IScheduleBlock } from '../../../models/ScheduleBlock';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
@@ -130,7 +131,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [isAdmin, setIsAdmin]           = useState(false);
   const [isSED, setIsSED]               = useState(false);
   const [configSSE, setConfigSSE]       = useState(false);                    // manual SRTSSEs override list
-  const [sseEmails, setSseEmails]       = useState<Set<string>>(new Set());   // Contact Directory SSE roster
+  const [sseRoster, setSseRoster]       = useState<{ name: string; email: string }[]>([]);  // Contact Directory SSEs
+  const [calSse, setCalSse]             = useState('');                        // whose availability the mini-calendar shows
+  const [calCommitments, setCalCommitments] = useState<ISseCommitment[]>([]);
+  const [showCal, setShowCal]           = useState(true);
   const [showAdmin, setShowAdmin]       = useState(false);
   const [showNewSpecial, setShowNewSpecial] = useState(false);
   const [savingId, setSavingId]         = useState<number | null>(null);
@@ -217,6 +221,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     ? displayName.split(',')[1].trim().split(' ')[0]
     : displayName.split(' ')[0];
   const userName     = (realIsAdmin && actAs) ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
+  const sseEmails    = React.useMemo(() => new Set(sseRoster.map(s => s.email)), [sseRoster]);
   // An SSE = present in the Contact Directory "Generalist" roster, OR on the manual SRTSSEs override.
   const isSSE        = configSSE || sseEmails.has(userEmail);
 
@@ -259,12 +264,24 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   // Special Projects so admins don't hand-maintain a list. Bumps showSpecial on for SSEs once loaded.
   useEffect(() => {
     new ContactDirectoryService(context).getAll()
-      .then(cs => setSseEmails(new Set(cs.filter(c => c.category === GENERALIST_CATEGORY).map(c => (c.email || '').toLowerCase()).filter(Boolean))))
+      .then(cs => setSseRoster(cs.filter(c => c.category === GENERALIST_CATEGORY)
+        .map(c => ({ name: c.name || c.email || '', email: (c.email || '').toLowerCase() }))
+        .filter(s => !!s.email)))
       .catch(() => undefined);
   }, []);
   useEffect(() => {
     if (sseEmails.has(userEmail)) setShowSpecial(true);
   }, [userEmail, sseEmails]);
+
+  // Mini-calendar: default to the effective user (if an SSE) else the first roster SSE; load their commitments.
+  useEffect(() => {
+    if (sseEmails.has(userEmail)) setCalSse(userEmail);
+    else if (!calSse && sseRoster.length) setCalSse(sseRoster[0].email);
+  }, [userEmail, sseRoster]);
+  useEffect(() => {
+    if (!calSse) { setCalCommitments([]); return; }
+    new CseRequestService(sp).getSseCommitments(calSse).then(setCalCommitments).catch(() => setCalCommitments([]));
+  }, [calSse, requests]);
 
   useEffect(() => {
     if (loading) return;
@@ -1481,6 +1498,30 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             </div>
           );
         })}
+      </div>
+
+      {/* Availability at a glance — mini green/red calendar for the selected SSE */}
+      <div style={{ margin: '12px 20px 0' }}>
+        <div style={{ border: '1px solid #edebe9', borderRadius: 6, overflow: 'hidden' }}>
+          <div onClick={() => setShowCal(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: '#f0f9f4', cursor: 'pointer', userSelect: 'none' as const, flexWrap: 'wrap' }}>
+            <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🗓️ Availability at a Glance</span>
+            {sseRoster.length > 0 && (
+              <select value={calSse} onClick={e => e.stopPropagation()} onChange={e => setCalSse(e.target.value)}
+                style={{ fontSize: 12, padding: '3px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
+                {sseRoster.map(s => <option key={s.email} value={s.email}>{s.name}</option>)}
+              </select>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>{showCal ? '▲' : '▼'}</span>
+          </div>
+          {showCal && (
+            <div style={{ padding: '12px 14px' }}>
+              {calSse ? <AvailabilityCalendar commitments={calCommitments} />
+                : <div style={{ fontSize: 12, color: '#888' }}>No SSE selected.</div>}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Upcoming Onsite panel */}
