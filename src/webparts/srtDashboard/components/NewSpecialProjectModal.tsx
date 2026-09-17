@@ -5,7 +5,7 @@ import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService, SpecialProjectsMap } from '../../../services/ConfigService';
 import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
-import { IScheduleBlock } from '../../../models/ScheduleBlock';
+import { IScheduleBlock, demoScheduleBlocks } from '../../../models/ScheduleBlock';
 import { PeoplePickerField, searchGraphUsers } from '../../../components/PeoplePickerField';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
@@ -54,6 +54,21 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
   const removeSseField = (i: number): void => setSses(prev => prev.length > 1 ? prev.filter((_, k) => k !== i) : prev);
 
   const canSave = !!category && !!initiative.trim() && sses.some(s => s.trim());
+
+  // Admin demo-fill — populates the whole form + schedule, tagged [SAMPLE] so it's obviously demo.
+  const fillDemo = (): void => {
+    const cats = Object.keys(spMap);
+    const cat = cats.filter(c => /houston/i.test(c))[0] || cats[0] || 'Houston CIC';
+    const inits = spMap[cat] || [];
+    const init = inits[0] || 'Bee Counting';
+    setCategory(cat);
+    setInitiative(init);
+    setTitle(`[SAMPLE] ${cat} — ${init}`);
+    setPriority('High');
+    setDescription(`[SAMPLE] Demo Special Project — SSE supporting the ${init} effort (design review, lab build/prep, and on-site delivery).`);
+    setSses(['Charlie Clemmer / charlie.clemmer@hpe.com']);
+    setBlocks(demoScheduleBlocks());
+  };
 
   const handleSave = async (): Promise<void> => {
     if (!canSave || saving) return;
@@ -138,6 +153,13 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
           {loading ? <div style={{ color: '#888', fontSize: 13 }}>Loading…</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
+              {isAdmin && (
+                <button onClick={fillDemo} title="Fill a tagged [SAMPLE] demo special project + schedule"
+                  style={{ alignSelf: 'flex-start', fontSize: 12, padding: '5px 12px', background: '#f3e8ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                  🧪 Demo fill
+                </button>
+              )}
+
               {/* Category */}
               <div>
                 <div style={LABEL}>Category</div>
@@ -220,7 +242,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
               {/* Schedule — attaches to the first SSE (the creator's own time) */}
               <div>
                 <div style={LABEL}>Schedule <span style={{ fontWeight: 400, color: '#888' }}>(optional — your Prep &amp; On-Site time; applies to the first SSE)</span></div>
-                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} showDemo={isAdmin} />
+                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} />
               </div>
 
               {error && (

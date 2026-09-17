@@ -1223,7 +1223,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             {/* Schedule & Time — flexible blocks (Remote/Prep/On-Site), any number, + one-click accounting */}
             <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e6ddf5' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🗓️ Schedule &amp; Time</div>
-              <ScheduleBlockEditor blocks={blockDraft} onChange={setBlockDraft} showAccounting={true} showDemo={isAdmin} />
+              <ScheduleBlockEditor blocks={blockDraft} onChange={setBlockDraft} showAccounting={true} />
               <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
                 {blockMsg && <span style={{ fontSize: 11, fontWeight: 600, color: blockMsg.ok ? '#107c10' : '#a4262c' }}>{blockMsg.text}</span>}
                 <button disabled={savingBlocks} onClick={() => handleSaveBlocks(req.id!).catch(() => undefined)}
