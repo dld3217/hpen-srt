@@ -4,6 +4,8 @@ import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService, SpecialProjectsMap } from '../../../services/ConfigService';
+import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
+import { IScheduleBlock } from '../../../models/ScheduleBlock';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface INewSpecialProjectModalProps {
@@ -32,6 +34,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
   const [sses, setSses]             = useState<string[]>(['']);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
+  const [blocks, setBlocks]         = useState<IScheduleBlock[]>([]);
 
   const configSvc = React.useMemo(() => new ConfigService(sp), [sp]);
 
@@ -62,7 +65,9 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
       const svc = new CseRequestService(sp);
       const cleanSses = sses.map(s => s.trim()).filter(Boolean);
       // One row per SSE — cross-geo staffing; they aggregate under the same Category/Initiative.
-      for (const sse of cleanSses) {
+      // Schedule blocks attach to the FIRST SSE (the creator's own time); others schedule on the dashboard.
+      for (let i = 0; i < cleanSses.length; i++) {
+        const sse = cleanSses[i];
         await svc.create({
           title: finalTitle,
           source: 'Special Project',
@@ -93,6 +98,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
           engagementType: 'Special Project',
           specialProjectCategory: category,
           specialProjectInitiative: initName,
+          scheduleBlocks: i === 0 ? blocks : [],
         });
       }
       onCreated();
@@ -206,6 +212,12 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
                 <div style={LABEL}>Description <span style={{ fontWeight: 400, color: '#888' }}>(optional)</span></div>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
                   placeholder="What is the SSE being asked to help with?" style={{ ...INPUT, resize: 'vertical' }} />
+              </div>
+
+              {/* Schedule — attaches to the first SSE (the creator's own time) */}
+              <div>
+                <div style={LABEL}>Schedule <span style={{ fontWeight: 400, color: '#888' }}>(optional — your Prep &amp; On-Site time; applies to the first SSE)</span></div>
+                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} />
               </div>
 
               {error && (

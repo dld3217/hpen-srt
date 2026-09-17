@@ -10,6 +10,8 @@ import { buildGeoCanonicalizer, dedupeByKey, normKey } from '../../../models/geo
 import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { DISPOSITION_STYLE, IEnvironmentRow } from '../../../models/StrategicEngagement';
+import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
+import { IScheduleBlock } from '../../../models/ScheduleBlock';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
 import { NewSpecialProjectModal } from './NewSpecialProjectModal';
@@ -174,6 +176,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [drawerOpportunity, setDrawerOpportunity] = useState('');
   const [drawerNotes, setDrawerNotes]             = useState('');
   const [savingNotes, setSavingNotes]             = useState(false);
+  const [blockDraft, setBlockDraft]               = useState<IScheduleBlock[]>([]);
+  const [savingBlocks, setSavingBlocks]           = useState(false);
   const [urlActionBanner, setUrlActionBanner]     = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
   const [buRegionsCfg, setBuRegionsCfg]           = useState<BURegionMap>({});
@@ -335,6 +339,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setDeclineDatesNote('');
       setDrawerOpportunity('');
       setDrawerNotes('');
+      setBlockDraft([]);
     } else {
       setExpandedId(req.id!);
       setDateEdit({
@@ -350,6 +355,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       });
       setDrawerOpportunity(req.opportunity || '');
       setDrawerNotes(req.notes || '');
+      setBlockDraft(req.scheduleBlocks || []);
       // Default the proposer to the effective role; admins can override before saving.
       setProposeAs((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
       setDeclineDatesId(null);
@@ -366,6 +372,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         : r
       ));
     } finally { setSavingNotes(false); }
+  };
+
+  const handleSaveBlocks = async (id: number): Promise<void> => {
+    setSavingBlocks(true);
+    try {
+      await new CseRequestService(sp).updateScheduleBlocks(id, blockDraft);
+      setRequests(prev => prev.map(r => r.id === id ? { ...r, scheduleBlocks: blockDraft } : r));
+    } finally { setSavingBlocks(false); }
   };
 
   const handleSaveDates = async (req: ICseRequest): Promise<void> => {
@@ -1198,6 +1212,18 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 style={{ padding: '5px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingNotes ? 0.6 : 1 }}>
                 {savingNotes ? 'Saving…' : 'Save Notes'}
               </button>
+            </div>
+
+            {/* Schedule & Time — flexible blocks (Remote/Prep/On-Site), any number, + one-click accounting */}
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e6ddf5' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🗓️ Schedule &amp; Time</div>
+              <ScheduleBlockEditor blocks={blockDraft} onChange={setBlockDraft} showAccounting={true} />
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                <button disabled={savingBlocks} onClick={() => handleSaveBlocks(req.id!).catch(() => undefined)}
+                  style={{ padding: '5px 18px', background: '#6b2faf', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: savingBlocks ? 0.6 : 1 }}>
+                  {savingBlocks ? 'Saving…' : 'Save Schedule'}
+                </button>
+              </div>
             </div>
 
             {/* Admin-only: who is proposing these dates? (the other party confirms) */}

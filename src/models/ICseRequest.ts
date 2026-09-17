@@ -1,3 +1,5 @@
+import { IScheduleBlock } from './ScheduleBlock';
+
 export type CseRequestStatus = 'Pending' | 'Accepted' | 'Scheduled' | 'In Progress' | 'Parked' | 'Complete' | 'Declined' | 'Needs Info' | 'Cancelled';
 
 // A single committed (Dates Confirmed) busy block for an SSE — powers availability views so SEs don't double-book.
@@ -66,6 +68,9 @@ export interface ICseRequest {
   // These are staffed cross-geo and are EXCLUDED from all geo/BU/Region rollups.
   specialProjectCategory?: string;   // e.g. 'Houston CIC', 'Marketing' (from SRTSpecialProjects config)
   specialProjectInitiative?: string; // e.g. 'Bee Counting' — pick-or-add; persists to config so SSEs aggregate
+  // Flexible scheduling: any number of typed time blocks (Remote/Prep/On-Site). JSON column ScheduleBlocks.
+  // Phase 1 runs alongside the legacy Remote*/Onsite* scalar fields (retired in Phase 2).
+  scheduleBlocks?: IScheduleBlock[];
 }
 
 export const CSE_STATUS_STYLE: Record<CseRequestStatus, { bg: string; color: string }> = {

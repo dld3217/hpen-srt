@@ -3,6 +3,7 @@ import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
 import { ICseRequest, CseRequestStatus, ScheduleStatus, CustTemp, ISseCommitment } from '../models/ICseRequest';
+import { IScheduleBlock, parseScheduleBlocks } from '../models/ScheduleBlock';
 
 const LIST_NAME = 'CSERequests';
 
@@ -16,7 +17,7 @@ const SP_SELECT = [
   'CustTemp', 'SignedOffBy', 'SignOffDate', 'Opportunity', 'Notes', 'AdditionalResources', 'Modified', 'SpecialtyType',
   'EngagementType', 'EngagementPurpose', 'CurrentEnvironment', 'HasDisplacement', 'EngagementOutcome',
   'DesiredOutcome', 'DesiredOutcomeDetail', 'EngagementPurposeOther', 'DatesProposedBy',
-  'SpecialProjectCategory', 'SpecialProjectInitiative',
+  'SpecialProjectCategory', 'SpecialProjectInitiative', 'ScheduleBlocks',
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,6 +82,7 @@ function mapToRequest(item: Record<string, any>): ICseRequest {
     datesProposedBy: item.DatesProposedBy || '',
     specialProjectCategory: item.SpecialProjectCategory || '',
     specialProjectInitiative: item.SpecialProjectInitiative || '',
+    scheduleBlocks: parseScheduleBlocks(item.ScheduleBlocks),
   };
 }
 
@@ -134,6 +136,7 @@ export class CseRequestService {
       EngagementPurposeOther: req.engagementPurposeOther || '',
       SpecialProjectCategory: req.specialProjectCategory || '',
       SpecialProjectInitiative: req.specialProjectInitiative || '',
+      ScheduleBlocks: JSON.stringify(req.scheduleBlocks || []),
     });
     return result.Id || result.id || 0;
   }
@@ -253,6 +256,11 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ SolutionsFocus: solutionsFocus });
   }
 
+  // Persist the flexible schedule-block list for a request.
+  async updateScheduleBlocks(id: number, blocks: IScheduleBlock[]): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({ ScheduleBlocks: JSON.stringify(blocks || []) });
+  }
+
   // Set / change a Special Project's category or initiative on an existing row.
   async updateSpecialProject(id: number, fields: { category?: string; initiative?: string }): Promise<void> {
     const update: Record<string, unknown> = {};
@@ -282,11 +290,23 @@ export class CseRequestService {
     const email = (sseEmail || '').toLowerCase();
     const out: ISseCommitment[] = [];
     for (const r of reqs) {
-      if (r.scheduleStatus !== 'Dates Confirmed') continue;
       if (['Declined', 'Cancelled', 'Complete'].indexOf(r.requestStatus) !== -1) continue;
       if (email && !(r.requestedCse || '').toLowerCase().includes(email)) continue;
       const sseName = (r.requestedCse.split('/')[0] || '').trim() || r.requestedCse;
       const sseEmailVal = (r.requestedCse.split('/')[1] || '').trim();
+      // New model: every dated schedule block (Remote/Prep/On-Site) is busy time.
+      const busyBlocks = (r.scheduleBlocks || []).filter(b => !b.tbd && b.start);
+      if (busyBlocks.length) {
+        for (const b of busyBlocks) {
+          const end = b.end || b.start;
+          if (end.substring(0, 10) >= todayStr) {
+            out.push({ start: b.start, end, type: b.type === 'On-Site' ? 'On-site' : 'Remote', location: b.type === 'On-Site' ? (b.location || '') : '', sseEmail: sseEmailVal, sseName, requestId: r.id });
+          }
+        }
+        continue; // blocks supersede the legacy scalar fields for this request
+      }
+      // Legacy model: only confirmed dates count.
+      if (r.scheduleStatus !== 'Dates Confirmed') continue;
       if (!r.remoteTbd && r.remoteStart) {
         const end = r.remoteEnd || r.remoteStart;
         if (end.substring(0, 10) >= todayStr) out.push({ start: r.remoteStart, end, type: 'Remote', location: '', sseEmail: sseEmailVal, sseName, requestId: r.id });
