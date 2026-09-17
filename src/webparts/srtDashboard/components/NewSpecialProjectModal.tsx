@@ -6,6 +6,7 @@ import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService, SpecialProjectsMap } from '../../../services/ConfigService';
 import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
 import { IScheduleBlock } from '../../../models/ScheduleBlock';
+import { PeoplePickerField, searchGraphUsers } from '../../../components/PeoplePickerField';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface INewSpecialProjectModalProps {
@@ -24,7 +25,8 @@ const INPUT: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fon
 // Category + Initiative come from the shared SRTSpecialProjects config; a brand-new initiative
 // typed here is persisted back so the next requester picks the SAME one (→ it aggregates).
 // One CSERequests row is created per staffed SSE — cross-geo by design; no BU/Region set.
-export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({ sp, isAdmin, onClose, onCreated }) => {
+export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({ sp, context, isAdmin, onClose, onCreated }) => {
+  const me = `${context.pageContext.user.displayName} / ${context.pageContext.user.email}`;
   const [spMap, setSpMap]           = useState<SpecialProjectsMap>({});
   const [loading, setLoading]       = useState(true);
   const [category, setCategory]     = useState('');
@@ -32,7 +34,8 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
   const [title, setTitle]           = useState('');
   const [priority, setPriority]     = useState('Medium');
   const [description, setDescription] = useState('');
-  const [sses, setSses]             = useState<string[]>(['']);
+  const [sses, setSses]             = useState<string[]>([me]);   // default the first SSE to the creator
+  const searchUsers = React.useCallback((q: string) => searchGraphUsers(context, q), [context]);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
   const [blocks, setBlocks]         = useState<IScheduleBlock[]>([]);
@@ -192,9 +195,8 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>One tracker row is created per SSE — they can be from any region.</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {sses.map((s, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 6 }}>
-                      <input value={s} onChange={e => setSse(i, e.target.value)}
-                        placeholder="Name / email  (e.g. Charlie Clemmer / charlie.clemmer@hpe.com)" style={{ ...INPUT, flex: 1 }} />
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                      <PeoplePickerField value={s} onChange={v => setSse(i, v)} searchUsers={searchUsers} placeholder="Search SSE name…" />
                       {sses.length > 1 && (
                         <button onClick={() => removeSseField(i)} title="Remove"
                           style={{ background: 'none', border: '1px solid #ccc', borderRadius: 4, color: '#d13438', fontSize: 15, cursor: 'pointer', padding: '0 10px' }}>✕</button>
