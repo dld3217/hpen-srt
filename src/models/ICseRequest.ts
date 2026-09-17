@@ -11,6 +11,7 @@ export interface ISseCommitment {
   sseEmail: string;
   sseName: string;
   requestId?: number;
+  hoursPerDay?: number;          // hours this commitment occupies EACH day it spans (8 = full day)
 }
 export type ScheduleStatus = 'TBD' | 'Dates Proposed' | 'Dates Confirmed' | 'Rescheduling';
 export type CustTemp = 'Low' | 'Normal' | 'High' | 'Critical';

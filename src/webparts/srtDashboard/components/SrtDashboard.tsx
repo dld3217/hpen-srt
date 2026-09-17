@@ -13,6 +13,7 @@ import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { DISPOSITION_STYLE, IEnvironmentRow } from '../../../models/StrategicEngagement';
 import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
 import { AvailabilityCalendar } from '../../../components/AvailabilityCalendar';
+import { TeamAvailabilityHeatmap } from '../../../components/TeamAvailabilityHeatmap';
 import { IScheduleBlock } from '../../../models/ScheduleBlock';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
@@ -135,6 +136,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [calSse, setCalSse]             = useState('');                        // whose availability the mini-calendar shows
   const [calCommitments, setCalCommitments] = useState<ISseCommitment[]>([]);
   const [showCal, setShowCal]           = useState(true);
+  const [allCommitments, setAllCommitments] = useState<ISseCommitment[]>([]);   // every SSE — powers the team heatmap
+  const [showHeat, setShowHeat]         = useState(false);
   const [showAdmin, setShowAdmin]       = useState(false);
   const [showNewSpecial, setShowNewSpecial] = useState(false);
   const [savingId, setSavingId]         = useState<number | null>(null);
@@ -282,6 +285,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (!calSse) { setCalCommitments([]); return; }
     new CseRequestService(sp).getSseCommitments(calSse).then(setCalCommitments).catch(() => setCalCommitments([]));
   }, [calSse, requests]);
+  useEffect(() => {
+    new CseRequestService(sp).getSseCommitments().then(setAllCommitments).catch(() => undefined);
+  }, [requests]);
 
   useEffect(() => {
     if (loading) return;
@@ -1519,6 +1525,24 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <div style={{ padding: '12px 14px' }}>
               {calSse ? <AvailabilityCalendar commitments={calCommitments} />
                 : <div style={{ fontSize: 12, color: '#888' }}>No SSE selected.</div>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Team availability heatmap — all SSEs, weekly load over ~90 days */}
+      <div style={{ margin: '12px 20px 0' }}>
+        <div style={{ border: '1px solid #edebe9', borderRadius: 6, overflow: 'hidden' }}>
+          <div onClick={() => setShowHeat(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: '#f0f9f4', cursor: 'pointer', userSelect: 'none' as const }}>
+            <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔥 Team Availability — next 90 days</span>
+            <span style={{ fontSize: 11, color: '#888' }}>({sseRoster.length} SSEs)</span>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>{showHeat ? '▲' : '▼'}</span>
+          </div>
+          {showHeat && (
+            <div style={{ padding: '12px 14px' }}>
+              <TeamAvailabilityHeatmap commitments={allCommitments} roster={sseRoster} />
             </div>
           )}
         </div>
