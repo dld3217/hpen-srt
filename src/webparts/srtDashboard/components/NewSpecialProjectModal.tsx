@@ -96,11 +96,14 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
       // Schedule blocks attach to the FIRST SSE (the creator's own time); others schedule on the dashboard.
       for (let i = 0; i < cleanSses.length; i++) {
         const sse = cleanSses[i];
+        const rowBlocks = i === 0 ? blocks : [];
+        const anyDated = rowBlocks.some(b => !b.tbd && b.start);
         await svc.create({
           title: finalTitle,
           source: 'Special Project',
           linkedPocId: 0,
-          requestStatus: 'Accepted',
+          // SSE self-initiates a Special Project → straight to Active (no SED accept / SSE confirm gate).
+          requestStatus: anyDated ? 'Scheduled' : 'In Progress',
           scheduleStatus: 'TBD',
           requestedCse: sse,
           sseManagerEmail: '',
@@ -126,7 +129,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
           engagementType: 'Special Project',
           specialProjectCategory: category,
           specialProjectInitiative: initName,
-          scheduleBlocks: i === 0 ? blocks : [],
+          scheduleBlocks: rowBlocks,
         });
       }
       onCreated();
