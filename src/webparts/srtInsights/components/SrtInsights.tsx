@@ -8,6 +8,7 @@ import { CseRequestService } from '../../../services/CseRequestService';
 import { ICseRequest } from '../../../models/ICseRequest';
 import { IEnvironmentRow } from '../../../models/StrategicEngagement';
 import { parseSseDisplay, sseNameKey } from '../../../models/sseIdentity';
+import { plannedHours, actualHoursOf } from '../../../models/ScheduleBlock';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
 export interface ISrtInsightsProps {
@@ -120,6 +121,32 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
   const sseSortClick = (field: 'name' | 'active' | 'strategic' | 'poc'): void =>
     setSseSort(prev => prev.field === field ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: field === 'name' ? 'asc' : 'desc' });
   const sseIcon = (field: string): string => sseSort.field !== field ? ' ⇅' : sseSort.dir === 'asc' ? ' ▲' : ' ▼';
+
+  // SSE Time — committed (planned) vs utilized (logged actual) hours, from schedule blocks.
+  // Reuses the same name→email identity reconciliation as the workload table above.
+  const timeAgg: Record<string, { name: string; committed: number; utilized: number; onsite: number; prep: number; remote: number }> = {};
+  requests.forEach(r => {
+    if (['Declined', 'Cancelled'].indexOf(r.requestStatus) !== -1) return;
+    const blocks = (r.scheduleBlocks || []).filter(b => !b.tbd && b.start);
+    if (!blocks.length) return;
+    const v = r.requestedCse || '';
+    const rawName = v.indexOf('/') !== -1 ? v.split('/')[0].trim() : v.trim();
+    const email = v.indexOf('/') !== -1 ? v.split('/')[1].trim().toLowerCase() : '';
+    const name = parseSseDisplay(rawName) || rawName || '(unassigned)';
+    const key = email || nameToEmail[sseNameKey(name)] || sseNameKey(name) || '(unassigned)';
+    const a = timeAgg[key] || { name, committed: 0, utilized: 0, onsite: 0, prep: 0, remote: 0 };
+    for (const b of blocks) {
+      const ph = plannedHours(b);
+      a.committed += ph;
+      if (b.type === 'On-Site') a.onsite += ph; else if (b.type === 'Prep') a.prep += ph; else a.remote += ph;
+      a.utilized += actualHoursOf(b);
+    }
+    timeAgg[key] = a;
+  });
+  const timeRows = Object.keys(timeAgg).map(k => timeAgg[k])
+    .filter(t => t.committed > 0 || t.utilized > 0)
+    .sort((x, y) => y.committed - x.committed);
+  const hr = (n: number): string => n ? `${n}h` : '—';
 
   // Desired outcome distribution (strategic only)
   const outcomeAgg: Record<string, number> = {};
@@ -256,6 +283,36 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* SSE Time — committed vs utilized (from schedule blocks) */}
+      <div style={CARD}>
+        <div style={SECTION_TITLE}>SSE Time — committed vs utilized (hours)</div>
+        {timeRows.length === 0 ? <div style={{ fontSize: 13, color: '#888' }}>No scheduled time blocks yet.</div> : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr>
+              <th style={TH}>SSE</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Committed</th>
+              <th style={{ ...TH, textAlign: 'right' }}>📍 On-Site</th>
+              <th style={{ ...TH, textAlign: 'right' }}>📋 Prep</th>
+              <th style={{ ...TH, textAlign: 'right' }}>💻 Remote</th>
+              <th style={{ ...TH, textAlign: 'right' }}>Utilized</th>
+            </tr></thead>
+            <tbody>
+              {timeRows.map(t => (
+                <tr key={t.name}>
+                  <td style={{ ...TD, fontWeight: 600 }}>{t.name}</td>
+                  <td style={{ ...TD, textAlign: 'right', fontWeight: 700 }}>{hr(t.committed)}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: '#007a7a' }}>{hr(t.onsite)}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: '#5b4b8a' }}>{hr(t.prep)}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: '#0078d4' }}>{hr(t.remote)}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: '#107c10', fontWeight: 700 }}>{hr(t.utilized)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>Committed = planned hours on the books (8h/day). Utilized = hours logged as actual. Excludes declined/cancelled.</div>
       </div>
 
       {/* Competitive Displacement Pipeline */}
