@@ -406,6 +406,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     } finally { setSavingNotes(false); }
   };
 
+  const handleDeleteOne = async (id: number): Promise<void> => {
+    if (!window.confirm('Permanently delete this request? This cannot be undone.')) return;
+    await new CseRequestService(sp).delete(id);
+    setRequests(prev => prev.filter(r => r.id !== id));
+    setExpandedId(null);
+  };
+
   const handleClearSamples = async (): Promise<void> => {
     const targets = requests.filter(isSampleRow);
     if (!targets.length) return;
@@ -1305,6 +1312,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   <button onClick={() => { setCancelId(req.id!); setCancelReason(''); setCancelNote(''); }}
                     style={{ padding: '5px 14px', background: '#fff', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel Request</button>
                 )}
+                {(isAdmin || isAssignedSse) && (
+                  <button onClick={() => handleDeleteOne(req.id!).catch(() => undefined)} title="Permanently delete this request"
+                    style={{ padding: '5px 14px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>🗑 Delete</button>
+                )}
                 <button onClick={() => { setExpandedId(null); setDateEdit(null); setCancelId(null); }}
                   style={{ padding: '5px 14px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>Close</button>
               </div>
@@ -1389,7 +1400,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
       {showAdmin && <SrtAdminPanel sp={sp} context={context} onClose={() => setShowAdmin(false)} />}
       {showNewSpecial && (
-        <NewSpecialProjectModal sp={sp} context={context} isAdmin={isAdmin}
+        <NewSpecialProjectModal sp={sp} context={context} showDemo={isAdmin || isSSE}
           onClose={() => setShowNewSpecial(false)}
           onCreated={() => new CseRequestService(sp).getAll().then(all => setRequests(all)).catch(() => undefined)} />
       )}

@@ -13,7 +13,7 @@ import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 export interface INewSpecialProjectModalProps {
   sp: SPFI;
   context: WebPartContext;
-  isAdmin?: boolean;       // gates the 🧪 demo-fill
+  showDemo?: boolean;      // gates the 🧪 demo-fill (admins + SSEs)
   onClose: () => void;
   onCreated: () => void;   // ask the dashboard to reload
 }
@@ -26,7 +26,7 @@ const INPUT: React.CSSProperties = { width: '100%', boxSizing: 'border-box', fon
 // Category + Initiative come from the shared SRTSpecialProjects config; a brand-new initiative
 // typed here is persisted back so the next requester picks the SAME one (→ it aggregates).
 // One CSERequests row is created per staffed SSE — cross-geo by design; no BU/Region set.
-export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({ sp, context, isAdmin, onClose, onCreated }) => {
+export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({ sp, context, showDemo, onClose, onCreated }) => {
   const me = `${context.pageContext.user.displayName} / ${context.pageContext.user.email}`;
   const [spMap, setSpMap]           = useState<SpecialProjectsMap>({});
   const [loading, setLoading]       = useState(true);
@@ -162,7 +162,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
           {loading ? <div style={{ color: '#888', fontSize: 13 }}>Loading…</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-              {isAdmin && (
+              {showDemo && (
                 <button onClick={fillDemo} title="Fill a tagged [SAMPLE] demo special project + schedule"
                   style={{ alignSelf: 'flex-start', fontSize: 12, padding: '5px 12px', background: '#f3e8ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
                   🧪 Demo fill
