@@ -6,6 +6,7 @@ import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService, SpecialProjectsMap } from '../../../services/ConfigService';
 import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
 import { IScheduleBlock, demoScheduleBlocks } from '../../../models/ScheduleBlock';
+import { ISseCommitment } from '../../../models/ICseRequest';
 import { PeoplePickerField, searchGraphUsers } from '../../../components/PeoplePickerField';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 
@@ -39,6 +40,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState('');
   const [blocks, setBlocks]         = useState<IScheduleBlock[]>([]);
+  const [commitments, setCommitments] = useState<ISseCommitment[]>([]);
 
   const configSvc = React.useMemo(() => new ConfigService(sp), [sp]);
 
@@ -47,6 +49,13 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
       .then(m => { setSpMap(m); setCategory(Object.keys(m)[0] || ''); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  // Load the first SSE's existing commitments → free/busy + conflict flags in the schedule editor.
+  useEffect(() => {
+    const sseEmail = (sses[0] ? (sses[0].split('/')[1] || '') : '').trim().toLowerCase();
+    if (!sseEmail) { setCommitments([]); return; }
+    new CseRequestService(sp).getSseCommitments(sseEmail).then(setCommitments).catch(() => setCommitments([]));
+  }, [sses]);
 
   const initiatives = category ? (spMap[category] || []) : [];
   const setSse = (i: number, v: string): void => setSses(prev => prev.map((s, k) => k === i ? v : s));
@@ -242,7 +251,7 @@ export const NewSpecialProjectModal: React.FC<INewSpecialProjectModalProps> = ({
               {/* Schedule — attaches to the first SSE (the creator's own time) */}
               <div>
                 <div style={LABEL}>Schedule <span style={{ fontWeight: 400, color: '#888' }}>(optional — your Prep &amp; On-Site time; applies to the first SSE)</span></div>
-                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} />
+                <ScheduleBlockEditor blocks={blocks} onChange={setBlocks} allowTypes={['Prep', 'On-Site']} commitments={commitments} />
               </div>
 
               {error && (

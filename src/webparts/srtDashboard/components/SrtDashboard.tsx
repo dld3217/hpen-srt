@@ -8,7 +8,7 @@ import { CseRequestService } from '../../../services/CseRequestService';
 import { ConfigService, BURegionMap, SpecialProjectsMap } from '../../../services/ConfigService';
 import { ContactDirectoryService, GENERALIST_CATEGORY } from '../../../services/ContactDirectoryService';
 import { buildGeoCanonicalizer, dedupeByKey, normKey } from '../../../models/geoNormalize';
-import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus } from '../../../models/ICseRequest';
+import { ICseRequest, CseRequestStatus, CSE_STATUS_STYLE, CUST_TEMP_STYLE, SCHEDULE_STATUS_STYLE, ScheduleStatus, ISseCommitment } from '../../../models/ICseRequest';
 import { SOLUTIONS, SOLUTION_CATEGORIES } from '../../../models/ISolution';
 import { DISPOSITION_STYLE, IEnvironmentRow } from '../../../models/StrategicEngagement';
 import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
@@ -185,6 +185,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [blockDraft, setBlockDraft]               = useState<IScheduleBlock[]>([]);
   const [savingBlocks, setSavingBlocks]           = useState(false);
   const [blockMsg, setBlockMsg]                   = useState<{ ok: boolean; text: string } | null>(null);
+  const [drawerCommitments, setDrawerCommitments] = useState<ISseCommitment[]>([]);
   const [urlActionBanner, setUrlActionBanner]     = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
   const [buRegionsCfg, setBuRegionsCfg]           = useState<BURegionMap>({});
@@ -361,6 +362,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setDrawerNotes('');
       setBlockDraft([]);
       setBlockMsg(null);
+      setDrawerCommitments([]);
     } else {
       setExpandedId(req.id!);
       setDateEdit({
@@ -378,6 +380,14 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setDrawerNotes(req.notes || '');
       setBlockDraft(req.scheduleBlocks || []);
       setBlockMsg(null);
+      // Load this SSE's OTHER commitments (exclude this request) → free/busy + conflict flags.
+      const sseEmail = (req.requestedCse.split('/')[1] || '').trim().toLowerCase();
+      setDrawerCommitments([]);
+      if (sseEmail) {
+        new CseRequestService(sp).getSseCommitments(sseEmail)
+          .then(cs => setDrawerCommitments(cs.filter(c => c.requestId !== req.id)))
+          .catch(() => undefined);
+      }
       // Default the proposer to the effective role; admins can override before saving.
       setProposeAs((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
       setDeclineDatesId(null);
@@ -1251,7 +1261,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             {/* Schedule & Time — flexible blocks (Remote/Prep/On-Site), any number, + one-click accounting */}
             <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #e6ddf5' }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: '#6b2faf', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🗓️ Schedule &amp; Time</div>
-              <ScheduleBlockEditor blocks={blockDraft} onChange={setBlockDraft} showAccounting={true} />
+              <ScheduleBlockEditor blocks={blockDraft} onChange={setBlockDraft} showAccounting={true} commitments={drawerCommitments} />
               <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
                 {blockMsg && <span style={{ fontSize: 11, fontWeight: 600, color: blockMsg.ok ? '#107c10' : '#a4262c' }}>{blockMsg.text}</span>}
                 <button disabled={savingBlocks} onClick={() => handleSaveBlocks(req.id!).catch(() => undefined)}
