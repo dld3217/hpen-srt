@@ -15,6 +15,7 @@ import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
 import { AvailabilityCalendar } from '../../../components/AvailabilityCalendar';
 import { TeamAvailabilityHeatmap } from '../../../components/TeamAvailabilityHeatmap';
 import { IScheduleBlock } from '../../../models/ScheduleBlock';
+import { demoJoeCoolRequests } from '../../../models/demoSse';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
 import { NewSpecialProjectModal } from './NewSpecialProjectModal';
@@ -225,6 +226,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     : displayName.split(' ')[0];
   const userName     = (realIsAdmin && actAs) ? (emailToName(actAs).split(' ')[0] || actAs) : realFirst;
   const sseEmails    = React.useMemo(() => new Set(sseRoster.map(s => s.email)), [sseRoster]);
+  // Calendar-picker options = directory roster ∪ any SSE that actually has commitments (incl. demo Joe Cool).
+  const dropdownSses = React.useMemo(() => {
+    const m = new Map<string, string>();
+    sseRoster.forEach(s => m.set(s.email, s.name));
+    allCommitments.forEach(c => { const e = (c.sseEmail || '').toLowerCase(); if (e && !m.has(e)) m.set(e, c.sseName || e); });
+    return Array.from(m.entries()).map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [sseRoster, allCommitments]);
   // An SSE = present in the Contact Directory "Generalist" roster, OR on the manual SRTSSEs override.
   const isSSE        = configSSE || sseEmails.has(userEmail);
 
@@ -434,6 +442,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     await new CseRequestService(sp).delete(id);
     setRequests(prev => prev.filter(r => r.id !== id));
     setExpandedId(null);
+  };
+
+  const handleLoadJoeCool = async (): Promise<void> => {
+    const svc = new CseRequestService(sp);
+    await Promise.all(demoJoeCoolRequests().map(r => svc.create(r).catch(() => undefined)));
+    const all = await svc.getAll();
+    setRequests(all);   // triggers the allCommitments reload → heatmap/calendar update
   };
 
   const handleClearSamples = async (): Promise<void> => {
@@ -1513,10 +1528,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: '#f0f9f4', cursor: 'pointer', userSelect: 'none' as const, flexWrap: 'wrap' }}>
             <div style={{ width: 3, height: 14, background: HPE_GREEN, borderRadius: 2 }} />
             <span style={{ fontSize: 11, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🗓️ Availability at a Glance</span>
-            {sseRoster.length > 0 && (
+            {dropdownSses.length > 0 && (
               <select value={calSse} onClick={e => e.stopPropagation()} onChange={e => setCalSse(e.target.value)}
                 style={{ fontSize: 12, padding: '3px 8px', border: '1px solid #ccc', borderRadius: 4 }}>
-                {sseRoster.map(s => <option key={s.email} value={s.email}>{s.name}</option>)}
+                {dropdownSses.map(s => <option key={s.email} value={s.email}>{s.name}</option>)}
               </select>
             )}
             <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>{showCal ? '▲' : '▼'}</span>
@@ -1668,6 +1683,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterType('All'); setFilterSpecialCat('All'); setFilterSpecialInit('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => handleLoadJoeCool().catch(() => undefined)}
+              title="Load a demo SSE (Joe Cool) with a full 90-day calendar — all tagged [SAMPLE], removable via Clear [SAMPLE]"
+              style={{ fontSize: 11, padding: '5px 10px', background: '#f3e8ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+              🧪 Load Joe Cool
             </button>
           )}
           {isAdmin && requests.filter(isSampleRow).length > 0 && (

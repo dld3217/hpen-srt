@@ -3,7 +3,7 @@ import { ISseCommitment } from '../models/ICseRequest';
 import { HOURS_PER_DAY } from '../models/ScheduleBlock';
 import { HPE_NAVY } from '../styles/hpe';
 
-const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pad = (n: number): string => (n < 10 ? '0' + n : '' + n);
 const keyOf = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -43,22 +43,26 @@ export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[]; wee
       <div style={{ fontSize: 11, color: '#605e5c', marginBottom: 6 }}>
         {MON[first.getMonth()]} {first.getDate()} – {MON[last.getMonth()]} {last.getDate()} · next {weeks * 7} days
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, maxWidth: 340 }}>
-        {DOW.map((h, i) => <div key={'h' + i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#888' }}>{h}</div>)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+        {DOW.map((h, i) => <div key={'h' + i} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#888', padding: '2px 0' }}>{h}</div>)}
         {cells.map(d => {
           const k = keyOf(d);
           const hrs = dayHours[k] || 0;
           const isPast = d < today;
           const isToday = k === todayKey;
+          const firstOfMonth = d.getDate() === 1;
           // green = free, yellow = partial (0 < h < full day), red = full/over
-          const bg = isPast ? '#f3f2f1' : hrs === 0 ? '#e8faf3' : hrs < HOURS_PER_DAY ? '#fff4ce' : '#fde7e9';
-          const fg = isPast ? '#bbb' : hrs === 0 ? '#107c10' : hrs < HOURS_PER_DAY ? '#8a6000' : '#a4262c';
+          const bg = isPast ? '#f7f6f5' : hrs === 0 ? '#eef9f1' : hrs < HOURS_PER_DAY ? '#fff7d6' : '#fde7e9';
+          const fg = isPast ? '#c0bdba' : hrs === 0 ? '#107c10' : hrs < HOURS_PER_DAY ? '#8a6000' : '#a4262c';
           return (
             <div key={k} title={hrs ? `${hrs}h booked\n${dayLabels[k].join('\n')}` : (isPast ? '' : 'Free')}
-              style={{ height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11,
-                background: bg, color: fg, borderRadius: 3, fontWeight: isToday ? 800 : 500,
-                border: isToday ? `2px solid ${HPE_NAVY}` : '1px solid #fff', opacity: isPast ? 0.55 : 1 }}>
-              {d.getDate()}
+              style={{ minHeight: 54, display: 'flex', flexDirection: 'column', padding: '4px 7px',
+                background: bg, borderRadius: 5, border: isToday ? `2px solid ${HPE_NAVY}` : '1px solid #ececec',
+                opacity: isPast ? 0.6 : 1 }}>
+              <div style={{ fontSize: 12, fontWeight: (isToday || firstOfMonth) ? 800 : 600, color: fg }}>
+                {firstOfMonth ? `${MON[d.getMonth()]} 1` : d.getDate()}
+              </div>
+              {hrs > 0 && <div style={{ marginTop: 'auto', fontSize: 10, fontWeight: 700, color: fg }}>{hrs}h</div>}
             </div>
           );
         })}
