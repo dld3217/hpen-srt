@@ -28,6 +28,10 @@ const emailToName = (email: string): string => {
   return local.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
 };
 
+// A demo record — tagged [SAMPLE] in its customer/title so demo data never contaminates real reporting.
+const isSampleRow = (r: ICseRequest): boolean =>
+  /^\s*\[sample\]/i.test(r.customerName || '') || /^\s*\[sample\]/i.test(r.title || '');
+
 const codeToName = (codes: string): string => {
   if (!codes) return '—';
   return codes.split(',').map(c => {
@@ -375,6 +379,15 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
         : r
       ));
     } finally { setSavingNotes(false); }
+  };
+
+  const handleClearSamples = async (): Promise<void> => {
+    const targets = requests.filter(isSampleRow);
+    if (!targets.length) return;
+    if (!window.confirm(`Delete ${targets.length} [SAMPLE] demo record${targets.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    const svc = new CseRequestService(sp);
+    await Promise.all(targets.map(t => svc.delete(t.id!).catch(() => undefined)));
+    setRequests(prev => prev.filter(r => !isSampleRow(r)));
   };
 
   const handleSaveBlocks = async (id: number): Promise<void> => {
@@ -1554,6 +1567,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
             <button onClick={() => { setActiveTile(null); setFilterStatus('All'); setFilterBU('All'); setFilterRegion('All'); setFilterPriority('All'); setFilterType('All'); setFilterSpecialCat('All'); setFilterSpecialInit('All'); setFilterSearch(''); }}
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3f2f1', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', color: '#605e5c' }}>
               Clear Filters
+            </button>
+          )}
+          {isAdmin && requests.filter(isSampleRow).length > 0 && (
+            <button onClick={() => handleClearSamples().catch(() => undefined)}
+              title="Delete all [SAMPLE] demo records"
+              style={{ fontSize: 11, padding: '5px 10px', background: '#fff4ce', color: '#8a6000', border: '1px solid #d0a000', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+              🧹 Clear {requests.filter(isSampleRow).length} [SAMPLE]
             </button>
           )}
           {isAdmin && selectedIds.size > 0 && (
