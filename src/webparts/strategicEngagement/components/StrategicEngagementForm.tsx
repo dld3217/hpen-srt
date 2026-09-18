@@ -9,6 +9,8 @@ import { ConfigService, BURegionMap, IBUConfig, IRegionConfig } from '../../../s
 import { CseRequestService } from '../../../services/CseRequestService';
 import { ContactDirectoryService, IContact, SPECIALIST_SLOTS, GENERALIST_CATEGORY, territoryTier } from '../../../services/ContactDirectoryService';
 import { ISseCommitment } from '../../../models/ICseRequest';
+import { IScheduleBlock, demoScheduleBlocks } from '../../../models/ScheduleBlock';
+import { ScheduleBlockEditor } from '../../../components/ScheduleBlockEditor';
 import { ISolutionDef, SOLUTIONS } from '../../../models/ISolution';
 import {
   ENGAGEMENT_PURPOSES, DESIRED_OUTCOMES, OUTCOME_OBJECTION, OUTCOME_OTHER, IEnvironmentRow,
@@ -46,6 +48,7 @@ interface IStrategicFormData {
   onsiteEnd: string;
   onsiteDuration: string;
   location: string;
+  scheduleBlocks: IScheduleBlock[];
   csePriority: string;
   csePriorityReason: string;
   opportunityAmount: number;
@@ -58,15 +61,12 @@ const EMPTY_FORM: IStrategicFormData = {
   desiredOutcomes: [], objectionText: '', outcomeOtherText: '',
   supportType: '', remoteTbd: true, onsiteTbd: true,
   remoteStart: '', remoteEnd: '', remoteDuration: '1-hour meeting',
-  onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '',
+  onsiteStart: '', onsiteEnd: '', onsiteDuration: '', location: '', scheduleBlocks: [],
   csePriority: 'Medium', csePriorityReason: '', opportunityAmount: 0, additionalResources: '',
 };
 
 const VERSION = APP_VERSION;
 
-// Quick-pick duration presets per schedule format (SE can still type a custom value)
-const REMOTE_PRESETS = ['30-min call', '1-hour meeting', '2-hour session', 'Half day'];
-const ONSITE_PRESETS = ['Half day', 'Full day', '2 days', 'Multi-day'];
 const SRT_DASHBOARD_URL = 'https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx';
 
 // ── Demo data (admin-only quick-fill for live demos) ──────────────────────────
@@ -231,58 +231,6 @@ const PeoplePickerField: React.FC<{
   );
 };
 
-// ── ScheduleBlock — per-block TBD toggle, quick-pick duration, dates, location ──
-const ScheduleBlock: React.FC<{
-  label: string; start: string; end: string; duration: string; location?: string;
-  tbd: boolean; presets: string[];
-  onStart: (v: string) => void; onEnd: (v: string) => void; onDuration: (v: string) => void;
-  onTbd: (v: boolean) => void; onLocation?: (v: string) => void;
-}> = ({ label, start, end, duration, location, tbd, presets, onStart, onEnd, onDuration, onTbd, onLocation }) => (
-  <div style={{ background: '#f9f9f9', border: '1px solid #e8e8e8', borderRadius: 4, padding: '10px 14px', marginBottom: 10 }}>
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, cursor: 'pointer', color: '#605e5c', whiteSpace: 'nowrap' }}>
-        <input type="checkbox" checked={tbd} onChange={e => onTbd(e.target.checked)} style={{ accentColor: HPE_NAVY }} />
-        Dates TBD / flexible
-      </label>
-    </div>
-    {!tbd && (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-        <div>
-          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested Start</label>
-          <input type="date" value={start ? start.substring(0, 10) : ''} onChange={e => onStart(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-        </div>
-        <div>
-          <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Requested End</label>
-          <input type="date" value={end ? end.substring(0, 10) : ''} onChange={e => onEnd(e.target.value ? new Date(e.target.value).toISOString() : '')} style={INPUT} />
-        </div>
-      </div>
-    )}
-    <div style={{ marginBottom: onLocation ? 8 : 0 }}>
-      <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Expected Duration / Effort</label>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-        {presets.map(p => {
-          const active = duration === p;
-          return (
-            <button key={p} type="button" onClick={() => onDuration(active ? '' : p)}
-              style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12, cursor: 'pointer',
-                border: `1px solid ${active ? HPE_NAVY : '#ccc'}`, background: active ? HPE_NAVY : '#fff', color: active ? '#fff' : '#605e5c' }}>
-              {p}
-            </button>
-          );
-        })}
-      </div>
-      <input type="text" value={duration} onChange={e => onDuration(e.target.value)} placeholder="…or type a custom duration" style={INPUT} />
-    </div>
-    {onLocation && (
-      <div>
-        <label style={{ ...LABEL_STYLE, fontSize: 11 }}>Location</label>
-        <input type="text" value={location || ''} onChange={e => onLocation(e.target.value)} placeholder="e.g. Denver, CO" style={INPUT} />
-      </div>
-    )}
-  </div>
-);
-
 // ── SolutionLandscape — what we position + what they run + disposition ─────────
 const SolutionLandscape: React.FC<{
   rows: IEnvironmentRow[];
@@ -388,7 +336,6 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   const [isAdmin, setIsAdmin]         = useState(false);
   const [demoIdx, setDemoIdx]         = useState(0);
   const [commitments, setCommitments] = useState<ISseCommitment[]>([]);
-  const [commitLoading, setCommitLoading] = useState(false);
   const [contacts, setContacts] = useState<IContact[]>([]);
   const [showResourceDrawer, setShowResourceDrawer] = useState(false);
   const [openSpec, setOpenSpec] = useState<Set<string>>(new Set());
@@ -403,11 +350,9 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
   useEffect(() => {
     if (!sseEmail) { setCommitments([]); return; }
     let cancelled = false;
-    setCommitLoading(true);
     new CseRequestService(sp).getSseCommitments(sseEmail)
       .then(c => { if (!cancelled) setCommitments(c); })
-      .catch(() => { if (!cancelled) setCommitments([]); })
-      .finally(() => { if (!cancelled) setCommitLoading(false); });
+      .catch(() => { if (!cancelled) setCommitments([]); });
     return () => { cancelled = true; };
   }, [sseEmail]);
 
@@ -468,12 +413,7 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       notes: s.notes,
       desiredOutcomes: s.desiredOutcomes,
       landscape,
-      supportType: s.supportType,
-      remoteTbd: !!s.datesTbd,
-      onsiteTbd: !!s.datesTbd,
-      remoteDuration: s.remoteDuration || '',
-      onsiteDuration: s.onsiteDuration || '',
-      location: s.location || '',
+      scheduleBlocks: demoScheduleBlocks(),
       csePriority: s.csePriority,
       csePriorityReason: s.priorityReason || '',
       opportunityAmount: s.opportunityAmount,
@@ -532,12 +472,12 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       const sedEmail   = buConfig?.sedEmail || '';
       const rows       = formData.landscape.filter(r => r.solutionCode || r.vendor || r.product || r.version);
       const focusCodes = Array.from(new Set(rows.map(r => r.solutionCode).filter(Boolean)));
-      const wantRemote = formData.supportType === 'Remote' || formData.supportType === 'Both';
-      const wantOnsite = formData.supportType === 'On-Site' || formData.supportType === 'Both';
-      // "Dates Proposed" requires an actual start date, not just the TBD toggle being off —
-      // otherwise the tracker shows a proposed schedule with no dates and prompts the SSE to confirm nothing.
-      const hasFirmDates = (wantRemote && !formData.remoteTbd && !!formData.remoteStart)
-                        || (wantOnsite && !formData.onsiteTbd && !!formData.onsiteStart);
+      // Blocks are the model now; derive the legacy scalar summary so the accept/confirm handshake still works.
+      const blocks = formData.scheduleBlocks;
+      const datedOf = (t: string): IScheduleBlock[] => blocks.filter(b => b.type === t && !b.tbd && !!b.start).sort((a, b) => a.start < b.start ? -1 : 1);
+      const fR = datedOf('Remote')[0], fO = datedOf('On-Site')[0];
+      const derivedSupport: 'Remote' | 'On-Site' | 'Both' = (fR && fO) ? 'Both' : fO ? 'On-Site' : 'Remote';
+      const hasFirmDates = !!fR || !!fO;
       const schedStatus = hasFirmDates ? 'Dates Proposed' as const : 'TBD' as const;
 
       const svc = new CseRequestService(sp);
@@ -555,9 +495,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
         csePriority: formData.csePriority || 'Medium',
         csePriorityReason: formData.csePriorityReason,
         solutionsFocus: focusCodes.join(','),
-        supportType: formData.supportType,
-        remoteTbd: formData.remoteTbd, remoteStart: formData.remoteTbd ? '' : formData.remoteStart, remoteEnd: formData.remoteTbd ? '' : formData.remoteEnd, remoteDuration: formData.remoteDuration,
-        onsiteTbd: formData.onsiteTbd, onsiteStart: formData.onsiteTbd ? '' : formData.onsiteStart, onsiteEnd: formData.onsiteTbd ? '' : formData.onsiteEnd, onsiteDuration: formData.onsiteDuration, onsiteDestination: formData.location,
+        supportType: derivedSupport,
+        remoteTbd: !fR, remoteStart: fR ? fR.start : '', remoteEnd: fR ? (fR.end || fR.start) : '', remoteDuration: '',
+        onsiteTbd: !fO, onsiteStart: fO ? fO.start : '', onsiteEnd: fO ? (fO.end || fO.start) : '', onsiteDuration: '', onsiteDestination: fO ? fO.location : '',
+        scheduleBlocks: blocks,
         sePrimary: formData.primarySe,
         semPrimary: semEmail, sedEmail,
         buRegion: formData.buRegion, hpenBusinessUnit: formData.hpenBusinessUnit,
@@ -585,29 +526,6 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
 
   const buKeys     = Object.keys(buRegions).sort();
   const regionKeys = formData.hpenBusinessUnit ? Object.keys((buRegions[formData.hpenBusinessUnit] as IBUConfig)?.regions || {}).sort() : [];
-  const showRemote = formData.supportType === 'Remote' || formData.supportType === 'Both';
-  const showOnsite = formData.supportType === 'On-Site' || formData.supportType === 'Both';
-
-  // ── SSE availability helpers ──
-  const dstr = (iso: string): string => (iso || '').substring(0, 10);
-  const fmtD = (iso: string): string => {
-    const p = dstr(iso); if (!p) return '';
-    const [y, m, d] = p.split('-').map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-  const fmtRange = (a: string, b: string): string => {
-    const s = fmtD(a), e = fmtD(b);
-    return e && e !== s ? `${s} – ${e}` : s;
-  };
-  const rangesOverlap = (aS: string, aE: string, bS: string, bE: string): boolean => aS <= bE && bS <= aE;
-  // The dates the SE is actively proposing on this form (only firm, non-TBD blocks).
-  const proposedBlocks: Array<{ s: string; e: string }> = [];
-  if (showRemote && !formData.remoteTbd && formData.remoteStart) proposedBlocks.push({ s: dstr(formData.remoteStart), e: dstr(formData.remoteEnd || formData.remoteStart) });
-  if (showOnsite && !formData.onsiteTbd && formData.onsiteStart) proposedBlocks.push({ s: dstr(formData.onsiteStart), e: dstr(formData.onsiteEnd || formData.onsiteStart) });
-  const commitConflicts = (c: ISseCommitment): boolean =>
-    proposedBlocks.some(p => rangesOverlap(p.s, p.e, dstr(c.start), dstr(c.end)));
-  const anyConflict = commitments.some(commitConflicts);
-  const sseShortName = formData.requestedSse.includes('/') ? formData.requestedSse.split('/')[0].trim() : '';
 
   // ── Territory-scoped Contact Directory selection ──
   const staffBU = formData.hpenBusinessUnit;
@@ -907,61 +825,10 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       <div style={SECTION}>
         <SectionHeader title="Time Coordination" />
 
-        {/* ── SSE availability: the selected SSE's confirmed upcoming commitments (avoid double-booking) ── */}
-        {sseEmail && (
-          <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6,
-            background: anyConflict ? '#fdf2f3' : '#f3f9f4',
-            border: `1px solid ${anyConflict ? '#d68a90' : '#bcdcc4'}` }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#3b3a39', marginBottom: 6 }}>
-              🗓️ {sseShortName || 'SSE'}’s upcoming commitments
-              {commitLoading && <span style={{ fontWeight: 400, color: '#888' }}> — checking…</span>}
-            </div>
-            {!commitLoading && commitments.length === 0 && (
-              <div style={{ fontSize: 12, color: '#605e5c' }}>No confirmed on-site or remote commitments coming up. 👍</div>
-            )}
-            {!commitLoading && commitments.length > 0 && (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {commitments.map((c, i) => {
-                    const clash = commitConflicts(c);
-                    return (
-                      <div key={i} style={{ fontSize: 12, color: clash ? '#a4262c' : '#323130', fontWeight: clash ? 700 : 400 }}>
-                        {c.type === 'On-site' ? '🏢' : '💻'} <strong>{fmtRange(c.start, c.end)}</strong> · {c.type}
-                        {c.location ? ` · ${c.location}` : ''}
-                        {clash && ' · ⚠️ overlaps your proposed dates'}
-                      </div>
-                    );
-                  })}
-                </div>
-                {anyConflict && (
-                  <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: '#a4262c' }}>
-                    ⚠️ Your proposed dates overlap {sseShortName || 'the SSE'}’s existing commitment(s). Pick different dates or confirm this is intended.
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        <div style={FIELD_ROW}>
-          <label style={LABEL_STYLE}>Format</label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['Remote', 'On-Site', 'Both'] as const).map(t => (
-              <button key={t} type="button" onClick={() => set('supportType', t)} style={TOGGLE_BTN(formData.supportType === t)}>{t}</button>
-            ))}
-          </div>
+        <div style={{ fontSize: 12, color: '#605e5c', marginBottom: 8 }}>
+          Add the time you need — <strong>Remote</strong>, <strong>Prep</strong>, or <strong>On-Site</strong>. Each block is its own date range (Days or Hours); overlaps with the SSE&rsquo;s existing bookings are flagged.
         </div>
-        {showRemote && (
-          <ScheduleBlock label="Remote Schedule" start={formData.remoteStart} end={formData.remoteEnd} duration={formData.remoteDuration}
-            tbd={formData.remoteTbd} presets={REMOTE_PRESETS}
-            onStart={v => set('remoteStart', v)} onEnd={v => set('remoteEnd', v)} onDuration={v => set('remoteDuration', v)} onTbd={v => set('remoteTbd', v)} />
-        )}
-        {showOnsite && (
-          <ScheduleBlock label="On-Site Schedule" start={formData.onsiteStart} end={formData.onsiteEnd} duration={formData.onsiteDuration} location={formData.location}
-            tbd={formData.onsiteTbd} presets={ONSITE_PRESETS}
-            onStart={v => set('onsiteStart', v)} onEnd={v => set('onsiteEnd', v)} onDuration={v => set('onsiteDuration', v)} onTbd={v => set('onsiteTbd', v)} onLocation={v => set('location', v)} />
-        )}
-        {!formData.supportType && <div style={{ fontSize: 12, color: '#888' }}>Pick a format above to set the schedule.</div>}
+        <ScheduleBlockEditor blocks={formData.scheduleBlocks} onChange={v => set('scheduleBlocks', v)} commitments={commitments} />
       </div>
 
       {/* Submit */}
