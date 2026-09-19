@@ -15,6 +15,7 @@ export interface ISseCommitment {
   label?: string;                // optional note (e.g. block label, or 'PTO — Vacation' for personal time)
   personal?: boolean;            // true = non-opportunity personal time (PTO/holiday/appointment) — shown distinctly
   tentative?: boolean;           // true = dates proposed but NOT yet approved by both SED + SSE — shown "on hold", not firm
+  customer?: string;             // customer/engagement name — for the hover + click-through to the request
 }
 export type ScheduleStatus = 'TBD' | 'Dates Proposed' | 'Dates Confirmed' | 'Rescheduling';
 export type CustTemp = 'Low' | 'Normal' | 'High' | 'Critical';

@@ -14,8 +14,9 @@ const HOLD_HATCH = 'repeating-linear-gradient(45deg, #fff3d6, #fff3d6 4px, #ffe4
 // One month's grid. Firm bookings: green = free, yellow = partial, red = full/over.
 // Days that are only TENTATIVE (no firm hours) render amber-hatched — "on hold", not yet booked.
 const MonthGrid: React.FC<{
-  base: Date; dayHours: Record<string, number>; dayTent: Record<string, number>; dayLabels: Record<string, string[]>; today: Date; todayKey: string;
-}> = ({ base, dayHours, dayTent, dayLabels, today, todayKey }) => {
+  base: Date; dayHours: Record<string, number>; dayTent: Record<string, number>; dayLabels: Record<string, string[]>;
+  dayReq: Record<string, number>; onOpenRequest?: (requestId: number) => void; today: Date; todayKey: string;
+}> = ({ base, dayHours, dayTent, dayLabels, dayReq, onOpenRequest, today, todayKey }) => {
   const gridStart = new Date(base); gridStart.setDate(1 - base.getDay());
   const lastDate = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
   const numRows = Math.ceil((base.getDay() + lastDate) / 7);
@@ -44,12 +45,16 @@ const MonthGrid: React.FC<{
           const parts: string[] = [];
           if (hrs > 0) parts.push(`${hrs}h booked`);
           if (tent > 0) parts.push(`${tent}h on hold (pending approval)`);
-          const title = (parts.length ? parts.join(' · ') + '\n' : '') + (dayLabels[k] ? dayLabels[k].join('\n') : (isPast ? '' : 'Free'));
+          const reqId = dayReq[k];
+          const clickable = !!onOpenRequest && !!reqId && !isPast;
+          const title = (parts.length ? parts.join(' · ') + '\n' : '') + (dayLabels[k] ? dayLabels[k].join('\n') : (isPast ? '' : 'Free')) + (clickable ? '\n(click to open the engagement)' : '');
           return (
             <div key={k} title={title}
+              onClick={clickable ? () => onOpenRequest!(reqId) : undefined}
               style={{ minHeight: 40, display: 'flex', flexDirection: 'column', padding: '3px 5px',
                 background: bg, backgroundImage: (!isPast && holdOnly) ? HOLD_HATCH : undefined,
-                borderRadius: 4, border: isToday ? `2px solid ${HPE_NAVY}` : (!isPast && holdOnly) ? '1px dashed #d0a000' : '1px solid #ececec', opacity: isPast ? 0.6 : 1 }}>
+                borderRadius: 4, border: isToday ? `2px solid ${HPE_NAVY}` : (!isPast && holdOnly) ? '1px dashed #d0a000' : '1px solid #ececec',
+                opacity: isPast ? 0.6 : 1, cursor: clickable ? 'pointer' : 'default' }}>
               <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 600, color: fg }}>{d.getDate()}</div>
               {(hrs > 0 || tent > 0) && <div style={{ marginTop: 'auto', fontSize: 9, fontWeight: 700, color: fg }}>{hrs > 0 ? `${hrs}h` : `${tent}h hold`}</div>}
             </div>
@@ -61,10 +66,11 @@ const MonthGrid: React.FC<{
 };
 
 // Three months side by side (current → +2) — a ~90-day wall-calendar view across the full width.
-export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[] }> = ({ commitments }) => {
+export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[]; onOpenRequest?: (requestId: number) => void }> = ({ commitments, onOpenRequest }) => {
   const dayHours: Record<string, number> = {};    // firm, both-approved bookings
   const dayTent: Record<string, number> = {};      // tentative "on hold" (pending approval)
   const dayLabels: Record<string, string[]> = {};
+  const dayReq: Record<string, number> = {};       // a request to open when the day is clicked (first non-personal)
   for (const c of commitments) {
     if (!c.start) continue;
     const hpd = (typeof c.hoursPerDay === 'number') ? c.hoursPerDay : HOURS_PER_DAY;
@@ -76,9 +82,12 @@ export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[] }> =
       const k = keyOf(d);
       if (c.tentative) dayTent[k] = (dayTent[k] || 0) + hpd;
       else dayHours[k] = (dayHours[k] || 0) + hpd;
+      // Personal time has no board row to open; link real engagements only (first one wins per day).
+      if (!c.personal && c.requestId && !dayReq[k]) dayReq[k] = c.requestId;
+      const who = c.personal ? '' : (c.customer ? ` · ${c.customer}` : '');
       const what = c.personal
         ? `🌴 ${c.label || 'Personal time'}`
-        : `${c.tentative ? '⏳ On hold — ' : ''}${c.type === 'On-site' ? '📍 On-Site' : '💻 Remote/Prep'}${c.location ? ' · ' + c.location : ''}`;
+        : `${c.tentative ? '⏳ On hold — ' : ''}${c.type === 'On-site' ? '📍 On-Site' : '💻 Remote/Prep'}${who}${c.location ? ' · ' + c.location : ''}`;
       (dayLabels[k] = dayLabels[k] || []).push(`${d.getMonth() + 1}/${d.getDate()} — ${what} (${hpd}h)`);
     }
   }
@@ -92,7 +101,7 @@ export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[] }> =
   return (
     <div>
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        {months.map((b, i) => <MonthGrid key={i} base={b} dayHours={dayHours} dayTent={dayTent} dayLabels={dayLabels} today={today} todayKey={todayKey} />)}
+        {months.map((b, i) => <MonthGrid key={i} base={b} dayHours={dayHours} dayTent={dayTent} dayLabels={dayLabels} dayReq={dayReq} onOpenRequest={onOpenRequest} today={today} todayKey={todayKey} />)}
       </div>
       <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 10, color: '#605e5c', flexWrap: 'wrap' }}>
         <span><span style={swatch('#eef9f1', '#107c10')} />Free</span>

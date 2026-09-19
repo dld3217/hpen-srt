@@ -320,7 +320,7 @@ export class CseRequestService {
           const end = b.end || b.start;
           const hpd = b.unit === 'hours' ? (b.hours || 0) : HOURS_PER_DAY;
           if (end.substring(0, 10) >= todayStr) {
-            out.push({ start: b.start, end, type: b.type === 'On-Site' ? 'On-site' : 'Remote', location: b.type === 'On-Site' ? (b.location || '') : '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: hpd, label: b.label || '', personal: isPersonal, tentative });
+            out.push({ start: b.start, end, type: b.type === 'On-Site' ? 'On-site' : 'Remote', location: b.type === 'On-Site' ? (b.location || '') : '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: hpd, label: b.label || '', personal: isPersonal, tentative, customer: r.customerName });
           }
         }
         continue; // blocks supersede the legacy scalar fields for this request
@@ -329,11 +329,11 @@ export class CseRequestService {
       if (!tentative && r.scheduleStatus !== 'Dates Confirmed') continue;
       if (!r.remoteTbd && r.remoteStart) {
         const end = r.remoteEnd || r.remoteStart;
-        if (end.substring(0, 10) >= todayStr) out.push({ start: r.remoteStart, end, type: 'Remote', location: '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY, personal: isPersonal, tentative });
+        if (end.substring(0, 10) >= todayStr) out.push({ start: r.remoteStart, end, type: 'Remote', location: '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY, personal: isPersonal, tentative, customer: r.customerName });
       }
       if (!r.onsiteTbd && r.onsiteStart) {
         const end = r.onsiteEnd || r.onsiteStart;
-        if (end.substring(0, 10) >= todayStr) out.push({ start: r.onsiteStart, end, type: 'On-site', location: r.onsiteDestination || '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY, personal: isPersonal, tentative });
+        if (end.substring(0, 10) >= todayStr) out.push({ start: r.onsiteStart, end, type: 'On-site', location: r.onsiteDestination || '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY, personal: isPersonal, tentative, customer: r.customerName });
       }
     }
     out.sort((a, b) => (a.start.substring(0, 10) < b.start.substring(0, 10) ? -1 : 1));

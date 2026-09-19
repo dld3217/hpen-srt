@@ -395,6 +395,38 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     }
   };
 
+  // Seed + open the expandable drawer for a request (shared by row-click and calendar click-through).
+  const openDrawer = (req: ICseRequest): void => {
+    setExpandedId(req.id!);
+    setDateEdit({
+      remoteTbd:        req.remoteTbd,
+      remoteStart:      toDateInput(req.remoteStart),
+      remoteEnd:        toDateInput(req.remoteEnd),
+      remoteDuration:   req.remoteDuration,
+      onsiteTbd:        req.onsiteTbd,
+      onsiteStart:      toDateInput(req.onsiteStart),
+      onsiteEnd:        toDateInput(req.onsiteEnd),
+      onsiteDuration:   req.onsiteDuration,
+      onsiteDestination: req.onsiteDestination,
+    });
+    setDrawerOpportunity(req.opportunity || '');
+    setDrawerNotes(req.notes || '');
+    setBlockDraft(req.scheduleBlocks || []);
+    setBlockMsg(null);
+    // Load this SSE's OTHER commitments (exclude this request) → free/busy + conflict flags.
+    const sseEmail = (req.requestedCse.split('/')[1] || '').trim().toLowerCase();
+    setDrawerCommitments([]);
+    if (sseEmail) {
+      new CseRequestService(sp).getSseCommitments(sseEmail)
+        .then(cs => setDrawerCommitments(cs.filter(c => c.requestId !== req.id)))
+        .catch(() => undefined);
+    }
+    // Default the proposer to the effective role; admins can override before saving.
+    setProposeAs((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
+    setDeclineDatesId(null);
+    setDeclineDatesNote('');
+  };
+
   const handleExpand = (req: ICseRequest): void => {
     if (expandedId === req.id) {
       setExpandedId(null);
@@ -407,35 +439,19 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       setBlockMsg(null);
       setDrawerCommitments([]);
     } else {
-      setExpandedId(req.id!);
-      setDateEdit({
-        remoteTbd:        req.remoteTbd,
-        remoteStart:      toDateInput(req.remoteStart),
-        remoteEnd:        toDateInput(req.remoteEnd),
-        remoteDuration:   req.remoteDuration,
-        onsiteTbd:        req.onsiteTbd,
-        onsiteStart:      toDateInput(req.onsiteStart),
-        onsiteEnd:        toDateInput(req.onsiteEnd),
-        onsiteDuration:   req.onsiteDuration,
-        onsiteDestination: req.onsiteDestination,
-      });
-      setDrawerOpportunity(req.opportunity || '');
-      setDrawerNotes(req.notes || '');
-      setBlockDraft(req.scheduleBlocks || []);
-      setBlockMsg(null);
-      // Load this SSE's OTHER commitments (exclude this request) → free/busy + conflict flags.
-      const sseEmail = (req.requestedCse.split('/')[1] || '').trim().toLowerCase();
-      setDrawerCommitments([]);
-      if (sseEmail) {
-        new CseRequestService(sp).getSseCommitments(sseEmail)
-          .then(cs => setDrawerCommitments(cs.filter(c => c.requestId !== req.id)))
-          .catch(() => undefined);
-      }
-      // Default the proposer to the effective role; admins can override before saving.
-      setProposeAs((req.requestedCse || '').toLowerCase().includes(userEmail) ? 'SSE' : 'SE');
-      setDeclineDatesId(null);
-      setDeclineDatesNote('');
+      openDrawer(req);
     }
+  };
+
+  // Open a request from elsewhere (e.g. clicking a booked day on the availability calendar):
+  // clear any tile filter, ensure its section is expanded, open its drawer, and scroll to the board.
+  const openRequestById = (id: number): void => {
+    const req = requests.find(r => r.id === id);
+    if (!req) return;
+    setActiveTile(null);
+    setShowPendingSection(true); setShowAcceptedSection(true); setShowCompletedSection(true); setShowParkedSection(true);
+    openDrawer(req);
+    setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
 
   const handleSaveNotes = async (id: number): Promise<void> => {
@@ -1585,7 +1601,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           </div>
           {showCal && (
             <div style={{ padding: '12px 14px' }}>
-              {calSse ? <AvailabilityCalendar commitments={calCommitments} />
+              {calSse ? <AvailabilityCalendar commitments={calCommitments} onOpenRequest={openRequestById} />
                 : <div style={{ fontSize: 12, color: '#888' }}>No SSE selected.</div>}
             </div>
           )}
