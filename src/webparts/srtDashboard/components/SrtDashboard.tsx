@@ -1484,6 +1484,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       )}
       {showScheduleMyself && (
         <ScheduleMyselfModal sp={sp} context={context}
+          forUser={(realIsAdmin && actAs) ? `${emailToName(actAs)} / ${actAs}` : ''}
           onClose={() => setShowScheduleMyself(false)}
           onCreated={() => new CseRequestService(sp).getAll().then(all => setRequests(all)).catch(() => undefined)} />
       )}

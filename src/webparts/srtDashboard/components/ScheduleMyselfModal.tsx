@@ -9,6 +9,8 @@ import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 export interface IScheduleMyselfModalProps {
   sp: SPFI;
   context: WebPartContext;
+  forUser?: string;        // "Name / email" of the EFFECTIVE user — set when an admin is viewing-as someone,
+                           // so the block books that person (and demos work). Empty = book the real signed-in user.
   onClose: () => void;
   onCreated: () => void;   // ask the dashboard to reload (refreshes the availability calendar)
 }
@@ -26,8 +28,9 @@ const KINDS: { key: string; label: string; icon: string }[] = [
   { key: 'Other',       label: 'Other / Free-form', icon: '📌' },
 ];
 
-export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, context, onClose, onCreated }) => {
-  const me = `${context.pageContext.user.displayName} / ${context.pageContext.user.email}`;
+export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, context, forUser, onClose, onCreated }) => {
+  // Book for the effective (viewed-as) user when an admin is spoofing; otherwise the real signed-in user.
+  const me = (forUser && forUser.trim()) ? forUser.trim() : `${context.pageContext.user.displayName} / ${context.pageContext.user.email}`;
   const [kind, setKind]       = useState('PTO');
   const [note, setNote]       = useState('');
   const [allDay, setAllDay]   = useState(true);
