@@ -1,10 +1,18 @@
 import * as React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { CseRequestService } from '../../../services/CseRequestService';
+import { ICseRequest } from '../../../models/ICseRequest';
 import { IScheduleBlock, newBlock } from '../../../models/ScheduleBlock';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
+
+const fmtShort = (iso: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  if (!m) return '';
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 export interface IScheduleMyselfModalProps {
   sp: SPFI;
@@ -39,6 +47,47 @@ export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, c
   const [hours, setHours]     = useState('4');
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
+  const [okMsg, setOkMsg]     = useState('');
+  const [existing, setExisting] = useState<ICseRequest[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [deletingId, setDeletingId]   = useState<number | null>(null);
+
+  const myEmail = (me.split('/')[1] || '').trim().toLowerCase();
+
+  // Load this person's own upcoming personal-time entries so they can be removed (e.g. an
+  // appointment changed). Personal rows are hidden from the board, so this is the only manage path.
+  const loadExisting = React.useCallback((): void => {
+    setLoadingList(true);
+    const pad = (n: number): string => (n < 10 ? '0' + n : '' + n);
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    new CseRequestService(sp).getAll()
+      .then(all => {
+        const mine = all.filter(r =>
+          r.engagementType === 'Personal'
+          && (r.requestedCse || '').toLowerCase().includes(myEmail)
+          && (r.scheduleBlocks || []).some(b => !b.tbd && b.start && (b.end || b.start).substring(0, 10) >= todayStr));
+        mine.sort((a, b) => {
+          const as = (a.scheduleBlocks || [])[0]?.start || '';
+          const bs = (b.scheduleBlocks || [])[0]?.start || '';
+          return as < bs ? -1 : as > bs ? 1 : 0;
+        });
+        setExisting(mine);
+        setLoadingList(false);
+      })
+      .catch(() => setLoadingList(false));
+  }, [sp, myEmail]);
+
+  useEffect(() => { loadExisting(); }, [loadExisting]);
+
+  const handleDelete = async (id: number): Promise<void> => {
+    setDeletingId(id);
+    try {
+      await new CseRequestService(sp).delete(id);
+      setExisting(prev => prev.filter(r => r.id !== id));
+      onCreated();   // refresh the dashboard availability views
+    } finally { setDeletingId(null); }
+  };
 
   const kindLabel = KINDS.filter(k => k.key === kind)[0]?.label || kind;
   const isOther   = kind === 'Other';
@@ -52,7 +101,7 @@ export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, c
 
   const handleSave = async (): Promise<void> => {
     if (!canSave || saving) return;
-    setSaving(true); setError('');
+    setSaving(true); setError(''); setOkMsg('');
     try {
       const displayLabel = `${kindLabel}${note.trim() ? ' — ' + note.trim() : ''}`;
       // A self-booked Prep block: full days over the range, or a set number of hours on one day.
@@ -95,8 +144,12 @@ export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, c
         engagementType: 'Personal',
         scheduleBlocks: [block],
       });
-      onCreated();
-      onClose();
+      onCreated();                 // refresh the dashboard availability views
+      // Stay open so you can add more or remove one — reset the form + refresh the list below.
+      setOkMsg(`✓ Added: ${displayLabel} (${fmtShort(start)}${allDay && effEnd !== start ? ` – ${fmtShort(effEnd)}` : ''}).`);
+      setNote(''); setStart(''); setEnd(''); setHours('4');
+      setSaving(false);
+      loadExisting();
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);
@@ -199,6 +252,11 @@ export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, c
               {error}
             </div>
           )}
+          {okMsg && (
+            <div style={{ fontSize: 12, color: '#107c10', background: '#dff6dd', border: '1px solid #107c10', borderRadius: 4, padding: '8px 10px' }}>
+              {okMsg}
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { handleSave().catch(() => undefined); }} disabled={!canSave || saving}
@@ -207,8 +265,37 @@ export const ScheduleMyselfModal: React.FC<IScheduleMyselfModalProps> = ({ sp, c
             </button>
             <button onClick={onClose} disabled={saving}
               style={{ padding: '9px 20px', background: '#f3f2f1', color: '#323130', border: '1px solid #ccc', borderRadius: 4, fontSize: 13, cursor: 'pointer' }}>
-              Cancel
+              Done
             </button>
+          </div>
+
+          {/* ── Your scheduled personal time — remove an entry if plans change ── */}
+          <div style={{ marginTop: 6, paddingTop: 12, borderTop: '1px solid #edebe9' }}>
+            <div style={{ ...LABEL, marginBottom: 6 }}>Your scheduled personal time</div>
+            {loadingList ? (
+              <div style={{ fontSize: 12, color: '#888' }}>Loading…</div>
+            ) : existing.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#888' }}>Nothing blocked yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {existing.map(r => {
+                  const b = (r.scheduleBlocks || [])[0];
+                  const when = b ? `${fmtShort(b.start)}${b.end && b.end !== b.start ? ` – ${fmtShort(b.end)}` : ''}${b.unit === 'hours' && b.hours ? ` · ${b.hours}h` : ''}` : '';
+                  return (
+                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: '#faf9f8', border: '1px solid #edebe9', borderRadius: 4, padding: '6px 8px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: HPE_NAVY, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b?.label || r.customerName || 'Personal time'}</div>
+                        {when && <div style={{ fontSize: 11, color: '#605e5c' }}>{when}</div>}
+                      </div>
+                      <button onClick={() => { handleDelete(r.id!).catch(() => undefined); }} disabled={deletingId === r.id}
+                        title="Remove this personal time" style={{ flexShrink: 0, fontSize: 11, padding: '3px 10px', background: '#fde7e9', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                        {deletingId === r.id ? '…' : '✕ Remove'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
