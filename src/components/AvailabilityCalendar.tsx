@@ -8,10 +8,14 @@ const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'Au
 const pad = (n: number): string => (n < 10 ? '0' + n : '' + n);
 const keyOf = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-// One month's grid. Days colored by hours booked: green = free, yellow = partial, red = full/over.
+// Amber hatch = "on hold" (dates proposed, pending both SED + SSE approval).
+const HOLD_HATCH = 'repeating-linear-gradient(45deg, #fff3d6, #fff3d6 4px, #ffe4a3 4px, #ffe4a3 8px)';
+
+// One month's grid. Firm bookings: green = free, yellow = partial, red = full/over.
+// Days that are only TENTATIVE (no firm hours) render amber-hatched — "on hold", not yet booked.
 const MonthGrid: React.FC<{
-  base: Date; dayHours: Record<string, number>; dayLabels: Record<string, string[]>; today: Date; todayKey: string;
-}> = ({ base, dayHours, dayLabels, today, todayKey }) => {
+  base: Date; dayHours: Record<string, number>; dayTent: Record<string, number>; dayLabels: Record<string, string[]>; today: Date; todayKey: string;
+}> = ({ base, dayHours, dayTent, dayLabels, today, todayKey }) => {
   const gridStart = new Date(base); gridStart.setDate(1 - base.getDay());
   const lastDate = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
   const numRows = Math.ceil((base.getDay() + lastDate) / 7);
@@ -27,16 +31,27 @@ const MonthGrid: React.FC<{
           const k = keyOf(d);
           if (d.getMonth() !== base.getMonth()) return <div key={k} style={{ minHeight: 40 }} />;   // blank pad for other months
           const hrs = dayHours[k] || 0;
+          const tent = dayTent[k] || 0;
           const isPast = d < today;
           const isToday = k === todayKey;
-          const bg = isPast ? '#f7f6f5' : hrs === 0 ? '#eef9f1' : hrs < HOURS_PER_DAY ? '#fff7d6' : '#fde7e9';
-          const fg = isPast ? '#c0bdba' : hrs === 0 ? '#107c10' : hrs < HOURS_PER_DAY ? '#8a6000' : '#a4262c';
+          const holdOnly = hrs === 0 && tent > 0;   // only tentative time → "on hold" look
+          let bg: string; let fg: string;
+          if (isPast) { bg = '#f7f6f5'; fg = '#c0bdba'; }
+          else if (hrs >= HOURS_PER_DAY) { bg = '#fde7e9'; fg = '#a4262c'; }
+          else if (hrs > 0) { bg = '#fff7d6'; fg = '#8a6000'; }
+          else if (holdOnly) { bg = '#fff7d6'; fg = '#8a6000'; }   // hatch drawn via backgroundImage below
+          else { bg = '#eef9f1'; fg = '#107c10'; }
+          const parts: string[] = [];
+          if (hrs > 0) parts.push(`${hrs}h booked`);
+          if (tent > 0) parts.push(`${tent}h on hold (pending approval)`);
+          const title = (parts.length ? parts.join(' · ') + '\n' : '') + (dayLabels[k] ? dayLabels[k].join('\n') : (isPast ? '' : 'Free'));
           return (
-            <div key={k} title={hrs ? `${hrs}h booked\n${dayLabels[k].join('\n')}` : (isPast ? '' : 'Free')}
+            <div key={k} title={title}
               style={{ minHeight: 40, display: 'flex', flexDirection: 'column', padding: '3px 5px',
-                background: bg, borderRadius: 4, border: isToday ? `2px solid ${HPE_NAVY}` : '1px solid #ececec', opacity: isPast ? 0.6 : 1 }}>
+                background: bg, backgroundImage: (!isPast && holdOnly) ? HOLD_HATCH : undefined,
+                borderRadius: 4, border: isToday ? `2px solid ${HPE_NAVY}` : (!isPast && holdOnly) ? '1px dashed #d0a000' : '1px solid #ececec', opacity: isPast ? 0.6 : 1 }}>
               <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 600, color: fg }}>{d.getDate()}</div>
-              {hrs > 0 && <div style={{ marginTop: 'auto', fontSize: 9, fontWeight: 700, color: fg }}>{hrs}h</div>}
+              {(hrs > 0 || tent > 0) && <div style={{ marginTop: 'auto', fontSize: 9, fontWeight: 700, color: fg }}>{hrs > 0 ? `${hrs}h` : `${tent}h hold`}</div>}
             </div>
           );
         })}
@@ -47,7 +62,8 @@ const MonthGrid: React.FC<{
 
 // Three months side by side (current → +2) — a ~90-day wall-calendar view across the full width.
 export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[] }> = ({ commitments }) => {
-  const dayHours: Record<string, number> = {};
+  const dayHours: Record<string, number> = {};    // firm, both-approved bookings
+  const dayTent: Record<string, number> = {};      // tentative "on hold" (pending approval)
   const dayLabels: Record<string, string[]> = {};
   for (const c of commitments) {
     if (!c.start) continue;
@@ -58,8 +74,12 @@ export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[] }> =
     for (let i = 0; i <= span; i++) {
       const d = new Date(s); d.setDate(s.getDate() + i);
       const k = keyOf(d);
-      dayHours[k] = (dayHours[k] || 0) + hpd;
-      (dayLabels[k] = dayLabels[k] || []).push(`${d.getMonth() + 1}/${d.getDate()} — ${c.type === 'On-site' ? '📍 On-Site' : '💻 Remote/Prep'}${c.location ? ' · ' + c.location : ''} (${hpd}h)`);
+      if (c.tentative) dayTent[k] = (dayTent[k] || 0) + hpd;
+      else dayHours[k] = (dayHours[k] || 0) + hpd;
+      const what = c.personal
+        ? `🌴 ${c.label || 'Personal time'}`
+        : `${c.tentative ? '⏳ On hold — ' : ''}${c.type === 'On-site' ? '📍 On-Site' : '💻 Remote/Prep'}${c.location ? ' · ' + c.location : ''}`;
+      (dayLabels[k] = dayLabels[k] || []).push(`${d.getMonth() + 1}/${d.getDate()} — ${what} (${hpd}h)`);
     }
   }
 
@@ -72,12 +92,13 @@ export const AvailabilityCalendar: React.FC<{ commitments: ISseCommitment[] }> =
   return (
     <div>
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        {months.map((b, i) => <MonthGrid key={i} base={b} dayHours={dayHours} dayLabels={dayLabels} today={today} todayKey={todayKey} />)}
+        {months.map((b, i) => <MonthGrid key={i} base={b} dayHours={dayHours} dayTent={dayTent} dayLabels={dayLabels} today={today} todayKey={todayKey} />)}
       </div>
       <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 10, color: '#605e5c', flexWrap: 'wrap' }}>
         <span><span style={swatch('#eef9f1', '#107c10')} />Free</span>
         <span><span style={swatch('#fff7d6', '#8a6000')} />Partly booked</span>
         <span><span style={swatch('#fde7e9', '#a4262c')} />Full day</span>
+        <span><span style={{ ...swatch('#fff3d6', '#d0a000'), backgroundImage: HOLD_HATCH }} />On hold (pending approval)</span>
         <span style={{ color: '#888' }}>Hover a day for hours &amp; bookings.</span>
       </div>
     </div>

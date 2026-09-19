@@ -58,7 +58,8 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
 
   useEffect(() => {
     new CseRequestService(sp).getAll()
-      .then(r => { setRequests(r); setLoading(false); })
+      // Personal time (PTO/holiday) is calendar-only — never counted in demand/utilization analytics.
+      .then(r => { setRequests(r.filter(x => x.engagementType !== 'Personal')); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 

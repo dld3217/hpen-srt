@@ -26,6 +26,7 @@ export const TeamAvailabilityHeatmap: React.FC<{ commitments: ISseCommitment[]; 
   roster.forEach(r => { nameByEmail[r.email] = r.name; load[r.email] = new Array(weeks).fill(0); });
   for (const c of commitments) {
     if (!c.start) continue;
+    if (c.tentative) continue;   // "on hold" (pending approval) isn't firm load — don't inflate the heatmap
     const email = (c.sseEmail || '').toLowerCase();
     if (!email) continue;
     if (!nameByEmail[email]) nameByEmail[email] = c.sseName || email;

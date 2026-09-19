@@ -12,6 +12,9 @@ export interface ISseCommitment {
   sseName: string;
   requestId?: number;
   hoursPerDay?: number;          // hours this commitment occupies EACH day it spans (8 = full day)
+  label?: string;                // optional note (e.g. block label, or 'PTO — Vacation' for personal time)
+  personal?: boolean;            // true = non-opportunity personal time (PTO/holiday/appointment) — shown distinctly
+  tentative?: boolean;           // true = dates proposed but NOT yet approved by both SED + SSE — shown "on hold", not firm
 }
 export type ScheduleStatus = 'TBD' | 'Dates Proposed' | 'Dates Confirmed' | 'Rescheduling';
 export type CustTemp = 'Low' | 'Normal' | 'High' | 'Critical';

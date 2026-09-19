@@ -19,6 +19,7 @@ import { demoJoeCoolRequests } from '../../../models/demoSse';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
 import { NewSpecialProjectModal } from './NewSpecialProjectModal';
+import { ScheduleMyselfModal } from './ScheduleMyselfModal';
 
 const parseEnvRows = (json: string | undefined): IEnvironmentRow[] => {
   try { const a = JSON.parse(json || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
@@ -116,6 +117,8 @@ const ACT_AS_ALIASES: Record<string, string> = {
   mike: 'mike.bruno@hpe.com',
   rick: 'rick.watkins@hpe.com',
 };
+// Charlie lands on the Active board fastest with the availability calendar collapsed by default.
+const CHARLIE_EMAIL = 'charlie.clemmer@hpe.com';
 // Resolve "David" / "Charlie Clemmer" / bare "john.smith" → a usable email.
 function resolveActAs(raw: string): string {
   const t = (raw || '').trim().toLowerCase();
@@ -141,6 +144,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [showHeat, setShowHeat]         = useState(false);
   const [showAdmin, setShowAdmin]       = useState(false);
   const [showNewSpecial, setShowNewSpecial] = useState(false);
+  const [showScheduleMyself, setShowScheduleMyself] = useState(false);
   const [savingId, setSavingId]         = useState<number | null>(null);
   const [decliningId, setDecliningId]   = useState<number | null>(null);
   const [declineNote, setDeclineNote]   = useState('');
@@ -185,7 +189,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [editInitId, setEditInitId]             = useState<number | null>(null);
   const [editInitVal, setEditInitVal]           = useState('');
   const [activeTile, setActiveTile]             = useState<string | null>(null);
-  const [sortField, setSortField]               = useState<'customer' | 'priority' | 'status' | 'type'>('customer');
+  const [sortField, setSortField]               = useState<'customer' | 'priority' | 'status' | 'type' | 'solution'>('customer');
   const [sortDir, setSortDir]                   = useState<'asc' | 'desc'>('asc');
   const [drawerOpportunity, setDrawerOpportunity] = useState('');
   const [drawerNotes, setDrawerNotes]             = useState('');
@@ -235,6 +239,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   }, [sseRoster, allCommitments]);
   // An SSE = present in the Contact Directory "Generalist" roster, OR on the manual SRTSSEs override.
   const isSSE        = configSSE || sseEmails.has(userEmail);
+  // Leadership (SEDs + admins) can delete any request; assigned SSEs can delete their own (below).
+  const canDeleteAny = isAdmin || isSED;
 
   const applyActAs = (email: string): void => {
     const e = resolveActAs(email);
@@ -283,6 +289,12 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   useEffect(() => {
     if (sseEmails.has(userEmail)) setShowSpecial(true);
   }, [userEmail, sseEmails]);
+
+  // Charlie asked to land on the Active board faster — collapse "Availability at a Glance" by default
+  // when (and only when) he's the effective user. He can still expand it; everyone else keeps it open.
+  useEffect(() => {
+    setShowCal(userEmail !== CHARLIE_EMAIL);
+  }, [userEmail]);
 
   // Mini-calendar: default to the effective user (if an SSE) else the first roster SSE; load their commitments.
   useEffect(() => {
@@ -556,7 +568,18 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
 
   const handleStatusChange = async (id: number, status: CseRequestStatus): Promise<void> => {
     try {
-      await new CseRequestService(sp).updateStatus(id, status);
+      const svc = new CseRequestService(sp);
+      if (status === 'Parked') {
+        // Parking frees the SSE's calendar: clear proposed/confirmed dates back to TBD.
+        await svc.parkRequest(id);
+        setRequests(prev => prev.map(r => r.id === id ? { ...r,
+          requestStatus: 'Parked', scheduleStatus: 'TBD', datesProposedBy: '',
+          remoteTbd: true, remoteStart: '', remoteEnd: '', remoteDuration: '',
+          onsiteTbd: true, onsiteStart: '', onsiteEnd: '', onsiteDuration: '', onsiteDestination: '',
+        } : r));
+        return;
+      }
+      await svc.updateStatus(id, status);
       setRequests(prev => prev.map(r => r.id === id ? { ...r, requestStatus: status } : r));
     } catch { /* ignore */ }
   };
@@ -672,6 +695,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     r.sePrimary.toLowerCase().includes(userEmail) || (r.requestedCse || '').toLowerCase().includes(userEmail);
   const notHidden = (r: ICseRequest): boolean =>
     (isAdmin || r.requestStatus !== 'Cancelled')
+    && r.engagementType !== 'Personal'                            // personal time (PTO/holiday) is calendar-only, never on the board
     && (showSpecial || r.engagementType !== 'Special Project');   // hide CIC/Marketing unless opted in
   const visibleRequests = requests.filter(r => notHidden(r) && (viewMode === 'all' || relevantToMe(r)));
   const mineCount = requests.filter(r => notHidden(r) && relevantToMe(r)).length;
@@ -749,6 +773,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     else if (sortField === 'priority') cmp = (PRIORITY_ORDER[a.csePriority] ?? 99) - (PRIORITY_ORDER[b.csePriority] ?? 99);
     else if (sortField === 'status') cmp = (STATUS_ORDER[a.requestStatus] ?? 99) - (STATUS_ORDER[b.requestStatus] ?? 99);
     else if (sortField === 'type') cmp = (isStrategicReq(a) ? 0 : 1) - (isStrategicReq(b) ? 0 : 1);
+    // Sort by the solution display name; rows with no solution sort last (~ collates after letters).
+    else if (sortField === 'solution') cmp = (a.solutionsFocus ? codeToName(a.solutionsFocus) : '~~~').localeCompare(b.solutionsFocus ? codeToName(b.solutionsFocus) : '~~~');
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -786,6 +812,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const statusStyle   = CSE_STATUS_STYLE[req.requestStatus]  || CSE_STATUS_STYLE.Pending;
     // A "Dates Proposed/Confirmed" flag is dishonest if no actual date was entered — show TBD until there is one.
     const hasRealDates  = (!req.remoteTbd && !!req.remoteStart) || (!req.onsiteTbd && !!req.onsiteStart);
+    // An engagement is "booked" only once BOTH David (SED accept) and the SSE have signed on. Until
+    // then any SE-picked date is tentative — shown hashed and NOT holding the SSE's calendar (#7).
+    const bothApproved  = ['Scheduled', 'In Progress', 'Complete'].indexOf(req.requestStatus) !== -1;
+    const datesTentative = hasRealDates && !bothApproved && ['Declined', 'Cancelled'].indexOf(req.requestStatus) === -1;
     const effSchedStatus: ScheduleStatus = (!hasRealDates && (req.scheduleStatus === 'Dates Proposed' || req.scheduleStatus === 'Dates Confirmed' || req.scheduleStatus === 'Rescheduling')) ? 'TBD' : req.scheduleStatus;
     const schedStyle    = SCHEDULE_STATUS_STYLE[effSchedStatus] || SCHEDULE_STATUS_STYLE.TBD;
     const tempStyle     = CUST_TEMP_STYLE[req.custTemp]    || CUST_TEMP_STYLE.Normal;
@@ -816,7 +846,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     const proposerName   = seConfirmTurn
       ? (sseName || 'the SSE')
       : (parseSseName(req.sePrimary.split('/')[0]?.trim() || '') || 'the SE');
-    const colSpan       = 12 + (showActionsCol ? 1 : 0) + (isAdmin ? 1 : 0);
+    const colSpan       = 12 + (showActionsCol ? 1 : 0) + (canDeleteAny ? 1 : 0);
     const isStrat       = isStrategicReq(req);
     const isSpec        = isSpecialReq(req);
     const canEditSpecial = isSpec && (isAdmin || isSSE || isAssignedSse);
@@ -829,7 +859,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       <React.Fragment key={req.id ?? i}>
       <tr style={{ background: rowBg, borderBottom: isExpanded ? 'none' : '1px solid #edebe9', cursor: 'pointer' }}
           onClick={() => handleExpand(req)}>
-        {isAdmin && (
+        {canDeleteAny && (
           <td style={{ ...TD, width: 28, padding: '4px 6px' }} onClick={e => e.stopPropagation()}>
             <input type="checkbox" checked={selectedIds.has(req.id!)}
               onChange={e => setSelectedIds(prev => {
@@ -961,9 +991,19 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           )}
         </td>
         <td style={TD}>
-          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{effSchedStatus}</span>
-          {!req.remoteTbd && req.remoteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}</div>}
-          {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, color: '#555', marginTop: 1 }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
+          {datesTentative ? (
+            <span title="Requested date — not booked on the SSE's calendar until both David (SED) and the SSE accept"
+              style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: '#f3f2f1', color: '#8a8886', border: '1px dashed #b3b0ad' }}>◪ Tentative</span>
+          ) : (
+            <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: schedStyle.bg, color: schedStyle.color }}>{effSchedStatus}</span>
+          )}
+          {(!req.remoteTbd && req.remoteStart) || (!req.onsiteTbd && req.onsiteStart) ? (
+            <div style={datesTentative ? { marginTop: 4, padding: '2px 5px', borderRadius: 3, backgroundImage: 'repeating-linear-gradient(45deg, #f6f5f4, #f6f5f4 4px, #e6e4e2 4px, #e6e4e2 8px)' } : undefined}>
+              {!req.remoteTbd && req.remoteStart && <div style={{ fontSize: 10, marginTop: datesTentative ? 0 : 3, color: datesTentative ? '#8a8886' : '#555', fontStyle: datesTentative ? 'italic' : 'normal' }}>Remote: {fmtDate(req.remoteStart)}{req.remoteEnd ? ` – ${fmtDate(req.remoteEnd)}` : ''}</div>}
+              {!req.onsiteTbd && req.onsiteStart && <div style={{ fontSize: 10, marginTop: 1, color: datesTentative ? '#8a8886' : '#555', fontStyle: datesTentative ? 'italic' : 'normal' }}>Onsite: {fmtDate(req.onsiteStart)}{req.onsiteEnd ? ` – ${fmtDate(req.onsiteEnd)}` : ''}</div>}
+              {datesTentative && <div style={{ fontSize: 9, color: '#a19f9d', marginTop: 2 }}>pending SED + SSE approval</div>}
+            </div>
+          ) : null}
         </td>
         <td style={TD} onClick={e => e.stopPropagation()}>
           {(isAdmin || isAssignedSse) ? (
@@ -1350,7 +1390,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                   <button onClick={() => { setCancelId(req.id!); setCancelReason(''); setCancelNote(''); }}
                     style={{ padding: '5px 14px', background: '#fff', color: '#a4262c', border: '1px solid #a4262c', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel Request</button>
                 )}
-                {(isAdmin || isAssignedSse) && (
+                {(isAdmin || isSED || isAssignedSse) && (
                   <button onClick={() => handleDeleteOne(req.id!).catch(() => undefined)} title="Permanently delete this request"
                     style={{ padding: '5px 14px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>🗑 Delete</button>
                 )}
@@ -1442,6 +1482,11 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           onClose={() => setShowNewSpecial(false)}
           onCreated={() => new CseRequestService(sp).getAll().then(all => setRequests(all)).catch(() => undefined)} />
       )}
+      {showScheduleMyself && (
+        <ScheduleMyselfModal sp={sp} context={context}
+          onClose={() => setShowScheduleMyself(false)}
+          onCreated={() => new CseRequestService(sp).getAll().then(all => setRequests(all)).catch(() => undefined)} />
+      )}
 
       {/* URL action result banner */}
       {urlActionBanner && (
@@ -1474,6 +1519,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           <a href={`${FRONT_DOOR_URL}?form=strategic`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New SSE Request</a>
           <a href={`${POC_HOME_URL}?new=1`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New POC</a>
           {(isAdmin || isSED || isSSE) && <button onClick={() => setShowNewSpecial(true)} style={HDR_GREEN}>⭐ New Special Project</button>}
+          {(isAdmin || isSED || isSSE || sseEmails.has(userEmail)) && <button onClick={() => setShowScheduleMyself(true)} title="Block personal time (PTO, holidays, appointments) on your availability" style={HDR_GREEN}>🗓️ Schedule Myself</button>}
           <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.25)' }} />
           {/* Navigation (outline) */}
           <a href={POC_HOME_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>POC Manager</a>
@@ -1699,7 +1745,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               🧹 Clear {requests.filter(isSampleRow).length} [SAMPLE]
             </button>
           )}
-          {isAdmin && selectedIds.size > 0 && (
+          {canDeleteAny && selectedIds.size > 0 && (
             <button onClick={handleDeleteSelected}
               style={{ fontSize: 11, padding: '5px 10px', background: '#a4262c', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>
               🗑 Delete {selectedIds.size} selected
@@ -1717,20 +1763,20 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
               <thead>
                 <tr style={{ background: HPE_NAVY, color: '#fff' }}>
                   {(() => {
-                    const sortIcon = (field: 'customer' | 'priority' | 'status' | 'type'): string =>
+                    const sortIcon = (field: 'customer' | 'priority' | 'status' | 'type' | 'solution'): string =>
                       sortField !== field ? ' ⇅' : sortDir === 'asc' ? ' ▲' : ' ▼';
-                    const handleSort = (field: 'customer' | 'priority' | 'status' | 'type'): void => {
+                    const handleSort = (field: 'customer' | 'priority' | 'status' | 'type' | 'solution'): void => {
                       if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
                       else { setSortField(field); setSortDir('asc'); }
                     };
                     return (<>
-                  {isAdmin && <th style={{ ...TH, width: 28, padding: '4px 6px' }} />}
+                  {canDeleteAny && <th style={{ ...TH, width: 28, padding: '4px 6px' }} />}
                   <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('type')}>Type{sortIcon('type')}</th>
                   <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('customer')}>Customer{sortIcon('customer')}</th>
                   <th style={TH}>SE</th>
                   <th style={TH}>SSE / SED</th>
                   <th style={TH}>BU / Region</th>
-                  <th style={TH}>Solutions</th>
+                  <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('solution')}>Solutions{sortIcon('solution')}</th>
                   <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('priority')}>Priority{sortIcon('priority')}</th>
                   <th style={{ ...TH, cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('status')}>Status{sortIcon('status')}</th>
                     </>);
@@ -1746,7 +1792,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {/* ── Awaiting Acceptance — SED ── */}
                 {!activeTile && pendingRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowPendingSection(s => !s)}>
-                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
                       ⏳ Awaiting Acceptance — SED ({pendingRows.length}) {showPendingSection ? '▾' : '▸'}
                     </td>
                   </tr>
@@ -1756,37 +1802,37 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {/* ── Pending Confirmation — SSE (David accepted; awaiting Charlie's dates) ── */}
                 {!activeTile && acceptedRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowAcceptedSection(s => !s)}>
-                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#ffe8cc', fontWeight: 700, color: '#b45309', fontSize: 12, userSelect: 'none' as const }}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#ffe8cc', fontWeight: 700, color: '#b45309', fontSize: 12, userSelect: 'none' as const }}>
                       📋 Pending Confirmation — SSE ({acceptedRows.length}) {showAcceptedSection ? '▾' : '▸'}
                     </td>
                   </tr>
                 )}
                 {!activeTile && showAcceptedSection && acceptedRows.map((req, i) => renderRow(req, i))}
 
-                {/* ── Parked — accepted but not ready to move forward ── */}
-                {!activeTile && parkedRows.length > 0 && (
-                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowParkedSection(s => !s)}>
-                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#e6e2f0', fontWeight: 700, color: '#5b4b8a', fontSize: 12, userSelect: 'none' as const }}>
-                      ⏸️ Parked — Not Ready ({parkedRows.length}) {showParkedSection ? '▾' : '▸'}
-                    </td>
-                  </tr>
-                )}
-                {!activeTile && showParkedSection && parkedRows.map((req, i) => renderRow(req, i))}
-
                 {/* ── Active Engagements ── */}
                 {!activeTile && (
                   <tr>
-                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#ebf3fc', fontWeight: 700, color: HPE_NAVY, fontSize: 12 }}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#ebf3fc', fontWeight: 700, color: HPE_NAVY, fontSize: 12 }}>
                       Active Engagements ({filteredRequests.length})
                     </td>
                   </tr>
                 )}
                 {filteredRequests.map((req, i) => renderRow(req, i))}
 
+                {/* ── Parked — on hold; calendar freed. Sits below Active per Charlie's request. ── */}
+                {!activeTile && parkedRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowParkedSection(s => !s)}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#e6e2f0', fontWeight: 700, color: '#5b4b8a', fontSize: 12, userSelect: 'none' as const }}>
+                      ⏸️ Parked — Not Ready ({parkedRows.length}) {showParkedSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showParkedSection && parkedRows.map((req, i) => renderRow(req, i))}
+
                 {/* ── Completed & Awaiting Sign-off ── */}
                 {!activeTile && completedRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowCompletedSection(s => !s)}>
-                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#e8f5e9', fontWeight: 700, color: '#1a6b2e', fontSize: 12, userSelect: 'none' as const }}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#e8f5e9', fontWeight: 700, color: '#1a6b2e', fontSize: 12, userSelect: 'none' as const }}>
                       ✓ Completed &amp; Awaiting Sign-off ({completedRows.length}){completedRows.filter(r => !r.signedOffBy).length > 0 ? ` · ${completedRows.filter(r => !r.signedOffBy).length} need sign-off` : ''} {showCompletedSection ? '▾' : '▸'}
                     </td>
                   </tr>
@@ -1796,7 +1842,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 {/* ── Declined & Cancelled (archive, collapsed by default) ── */}
                 {!activeTile && declinedRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowDeclinedSection(s => !s)}>
-                    <td colSpan={isAdmin ? 13 : 12} style={{ padding: '6px 12px', background: '#f3f2f1', fontWeight: 700, color: '#a4262c', fontSize: 12, userSelect: 'none' as const }}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#f3f2f1', fontWeight: 700, color: '#a4262c', fontSize: 12, userSelect: 'none' as const }}>
                       ❌ Declined &amp; Cancelled ({declinedRows.length}) {showDeclinedSection ? '▾' : '▸'}
                     </td>
                   </tr>

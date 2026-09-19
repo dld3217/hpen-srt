@@ -189,6 +189,19 @@ export class CseRequestService {
     await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update(update);
   }
 
+  // Park an engagement: put it on hold AND free up the calendar. Clears the proposed/confirmed
+  // dates back to TBD so the SSE's availability opens immediately (Parked is also excluded from
+  // getSseCommitments). Schedule blocks are left intact — re-date on the dashboard when it un-parks.
+  async parkRequest(id: number): Promise<void> {
+    await this.sp.web.lists.getByTitle(LIST_NAME).items.getById(id).update({
+      RequestStatus: 'Parked',
+      ScheduleStatus: 'TBD',
+      DatesProposedBy: '',
+      RemoteTBD: true,  RemoteStart: null, RemoteEnd: null, RemoteDuration: '',
+      OnsiteTBD: true,  OnsiteStart: null, OnsiteEnd: null, OnsiteDuration: '', OnsiteDestination: '',
+    });
+  }
+
   async updateDates(id: number, dates: {
     remoteTbd?: boolean; remoteStart?: string; remoteEnd?: string; remoteDuration?: string;
     onsiteTbd?: boolean; onsiteStart?: string; onsiteEnd?: string; onsiteDuration?: string; onsiteDestination?: string;
@@ -290,10 +303,16 @@ export class CseRequestService {
     const email = (sseEmail || '').toLowerCase();
     const out: ISseCommitment[] = [];
     for (const r of reqs) {
-      if (['Declined', 'Cancelled', 'Complete'].indexOf(r.requestStatus) !== -1) continue;
+      // Done or freed → off the calendar entirely. Parked deliberately releases its dates.
+      if (['Declined', 'Cancelled', 'Complete', 'Parked'].indexOf(r.requestStatus) !== -1) continue;
       if (email && !(r.requestedCse || '').toLowerCase().includes(email)) continue;
+      // FIRM = both parties approved (Scheduled / In Progress). Otherwise the dates are still
+      // TENTATIVE ("on hold") — surfaced so another SE won't book over a pending request, but
+      // rendered distinctly and never counted as a hard commitment. Personal time is always firm.
+      const tentative = r.requestStatus !== 'Scheduled' && r.requestStatus !== 'In Progress';
       const sseName = (r.requestedCse.split('/')[0] || '').trim() || r.requestedCse;
       const sseEmailVal = (r.requestedCse.split('/')[1] || '').trim();
+      const isPersonal = r.engagementType === 'Personal';
       // New model: every dated schedule block (Remote/Prep/On-Site) is busy time.
       const busyBlocks = (r.scheduleBlocks || []).filter(b => !b.tbd && b.start);
       if (busyBlocks.length) {
@@ -301,20 +320,20 @@ export class CseRequestService {
           const end = b.end || b.start;
           const hpd = b.unit === 'hours' ? (b.hours || 0) : HOURS_PER_DAY;
           if (end.substring(0, 10) >= todayStr) {
-            out.push({ start: b.start, end, type: b.type === 'On-Site' ? 'On-site' : 'Remote', location: b.type === 'On-Site' ? (b.location || '') : '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: hpd });
+            out.push({ start: b.start, end, type: b.type === 'On-Site' ? 'On-site' : 'Remote', location: b.type === 'On-Site' ? (b.location || '') : '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: hpd, label: b.label || '', personal: isPersonal, tentative });
           }
         }
         continue; // blocks supersede the legacy scalar fields for this request
       }
-      // Legacy model: only confirmed dates count (full days).
-      if (r.scheduleStatus !== 'Dates Confirmed') continue;
+      // Legacy model: firm rows require confirmed dates; tentative rows surface any set dates as "on hold".
+      if (!tentative && r.scheduleStatus !== 'Dates Confirmed') continue;
       if (!r.remoteTbd && r.remoteStart) {
         const end = r.remoteEnd || r.remoteStart;
-        if (end.substring(0, 10) >= todayStr) out.push({ start: r.remoteStart, end, type: 'Remote', location: '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY });
+        if (end.substring(0, 10) >= todayStr) out.push({ start: r.remoteStart, end, type: 'Remote', location: '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY, personal: isPersonal, tentative });
       }
       if (!r.onsiteTbd && r.onsiteStart) {
         const end = r.onsiteEnd || r.onsiteStart;
-        if (end.substring(0, 10) >= todayStr) out.push({ start: r.onsiteStart, end, type: 'On-site', location: r.onsiteDestination || '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY });
+        if (end.substring(0, 10) >= todayStr) out.push({ start: r.onsiteStart, end, type: 'On-site', location: r.onsiteDestination || '', sseEmail: sseEmailVal, sseName, requestId: r.id, hoursPerDay: HOURS_PER_DAY, personal: isPersonal, tentative });
       }
     }
     out.sort((a, b) => (a.start.substring(0, 10) < b.start.substring(0, 10) ? -1 : 1));
