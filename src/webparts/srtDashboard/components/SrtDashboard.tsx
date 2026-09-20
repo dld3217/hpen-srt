@@ -1750,7 +1750,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           )}
           {isAdmin && (
             <button onClick={() => handleLoadJoeCool().catch(() => undefined)}
-              title="Load a demo SSE (Joe Cool) with a full 90-day calendar — all tagged [SAMPLE], removable via Clear [SAMPLE]"
+              title="Load a demo SSE (Joe Cool) with a 3-month calendar covering every state — booked (red), partial hours (yellow), on-hold (amber), and personal time (🌴). All tagged [SAMPLE], removable via Clear [SAMPLE]."
               style={{ fontSize: 11, padding: '5px 10px', background: '#f3e8ff', color: '#6b2faf', border: '1px solid #6b2faf', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
               🧪 Load Joe Cool
             </button>
