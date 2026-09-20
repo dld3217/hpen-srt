@@ -183,6 +183,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [showAcceptedSection, setShowAcceptedSection]   = useState(true);
   const [showParkedSection, setShowParkedSection]       = useState(true);
   const [showDeclinedSection, setShowDeclinedSection]   = useState(false);
+  const [showNeedsSignoffSection, setShowNeedsSignoffSection] = useState(true);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
   const [editSolId, setEditSolId]               = useState<number | null>(null);
   const [editSolCodes, setEditSolCodes]         = useState<Set<string>>(new Set());
@@ -743,7 +744,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
     if (activeTile === 'Awaiting SSE')   return visibleRequests.filter(r => r.requestStatus === 'Accepted');
     if (activeTile === 'Parked')         return visibleRequests.filter(r => r.requestStatus === 'Parked');
     if (activeTile === 'Active')         return visibleRequests.filter(r => ['Scheduled', 'In Progress'].includes(r.requestStatus));
-    if (activeTile === 'Complete')       return visibleRequests.filter(r => r.requestStatus === 'Complete');
+    if (activeTile === 'Complete')       return visibleRequests.filter(r => r.requestStatus === 'Complete' && !!r.signedOffBy);
     if (activeTile === 'Needs Sign-off') return visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy);
     if (activeTile === 'Declined')       return visibleRequests.filter(r => r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled');
     return visibleRequests;
@@ -771,7 +772,10 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const pendingRows   = visibleRequests.filter(r => r.requestStatus === 'Pending' && matchesFilters(r));
   const acceptedRows  = visibleRequests.filter(r => r.requestStatus === 'Accepted' && matchesFilters(r));
   const parkedRows    = visibleRequests.filter(r => r.requestStatus === 'Parked' && matchesFilters(r));
-  const completedRows = visibleRequests.filter(r => r.requestStatus === 'Complete' && matchesFilters(r));
+  // Two-stage close: the SSE marks Complete → "Needs Sign-off" (awaiting the SE handshake); only once
+  // the SE signs off does it become a TRUE Completed. Split so each gets its own board section.
+  const awaitingSignoffRows = visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy && matchesFilters(r));
+  const completedRows       = visibleRequests.filter(r => r.requestStatus === 'Complete' && !!r.signedOffBy && matchesFilters(r));
   const declinedRows  = visibleRequests.filter(r => (r.requestStatus === 'Declined' || r.requestStatus === 'Cancelled') && matchesFilters(r));
 
   const filteredRequests = tileFiltered.filter(r => {
@@ -799,8 +803,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const awaitingSse  = acceptedRows;
   const active       = visibleRequests.filter(r => r.requestStatus === 'Scheduled' || r.requestStatus === 'In Progress');
   const parked       = parkedRows;
-  const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete');
-  const needsSignOff = complete.filter(r => !r.signedOffBy);
+  const needsSignOff = visibleRequests.filter(r => r.requestStatus === 'Complete' && !r.signedOffBy);
+  const complete     = visibleRequests.filter(r => r.requestStatus === 'Complete' && !!r.signedOffBy);  // TRUE completed = SE has signed off
   const declined     = declinedRows;
 
   // Actions column shows for SEDs, admins, or an assigned SSE who has any pending action
@@ -1671,7 +1675,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       <div ref={tableRef} style={{ padding: '16px 20px' }}>
 
         <div style={{ fontSize: 12, fontWeight: 700, color: HPE_NAVY, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, borderBottom: `2px solid ${HPE_GREEN}`, paddingBottom: 6 }}>
-          {activeTile ? activeTile : 'SSE Requests'} ({(activeTile ? filteredRequests : [...pendingRows, ...filteredRequests, ...completedRows]).length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
+          {activeTile ? activeTile : 'SSE Requests'} ({(activeTile ? filteredRequests : [...pendingRows, ...filteredRequests, ...awaitingSignoffRows, ...completedRows]).length}{filteredRequests.length !== visibleRequests.length ? ` of ${visibleRequests.length}` : ''})
         </div>
 
         {/* Filter bar */}
@@ -1846,11 +1850,21 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
                 )}
                 {!activeTile && showParkedSection && parkedRows.map((req, i) => renderRow(req, i))}
 
-                {/* ── Completed & Awaiting Sign-off ── */}
+                {/* ── Needs Sign-off — SSE marked Complete; awaiting the SE handshake ── */}
+                {!activeTile && awaitingSignoffRows.length > 0 && (
+                  <tr style={{ cursor: 'pointer' }} onClick={() => setShowNeedsSignoffSection(s => !s)}>
+                    <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#fff4ce', fontWeight: 700, color: '#8a6000', fontSize: 12, userSelect: 'none' as const }}>
+                      🖊️ Needs Sign-off — Awaiting SE ({awaitingSignoffRows.length}) {showNeedsSignoffSection ? '▾' : '▸'}
+                    </td>
+                  </tr>
+                )}
+                {!activeTile && showNeedsSignoffSection && awaitingSignoffRows.map((req, i) => renderRow(req, i))}
+
+                {/* ── Completed — the SE has signed off (truly done) ── */}
                 {!activeTile && completedRows.length > 0 && (
                   <tr style={{ cursor: 'pointer' }} onClick={() => setShowCompletedSection(s => !s)}>
                     <td colSpan={canDeleteAny ? 13 : 12} style={{ padding: '6px 12px', background: '#e8f5e9', fontWeight: 700, color: '#1a6b2e', fontSize: 12, userSelect: 'none' as const }}>
-                      ✓ Completed &amp; Awaiting Sign-off ({completedRows.length}){completedRows.filter(r => !r.signedOffBy).length > 0 ? ` · ${completedRows.filter(r => !r.signedOffBy).length} need sign-off` : ''} {showCompletedSection ? '▾' : '▸'}
+                      ✓ Completed ({completedRows.length}) {showCompletedSection ? '▾' : '▸'}
                     </td>
                   </tr>
                 )}
