@@ -18,6 +18,9 @@ import { IScheduleBlock } from '../../../models/ScheduleBlock';
 import { demoJoeCoolRequests } from '../../../models/demoSse';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
 import { SrtAdminPanel } from './SrtAdminPanel';
+import { SE_GUIDE_HTML } from './UserGuide/SeGuideHtml';
+import { SSE_GUIDE_HTML } from './UserGuide/SseGuideHtml';
+import { SED_GUIDE_HTML } from './UserGuide/SedGuideHtml';
 import { NewSpecialProjectModal } from './NewSpecialProjectModal';
 import { ScheduleMyselfModal } from './ScheduleMyselfModal';
 
@@ -145,6 +148,13 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
   const [showAdmin, setShowAdmin]       = useState(false);
   const [showNewSpecial, setShowNewSpecial] = useState(false);
   const [showScheduleMyself, setShowScheduleMyself] = useState(false);
+  const [openGuide, setOpenGuide]       = useState<'' | 'se' | 'sse' | 'sed'>('');
+
+  // In-app help panels (mirror POC Manager): slide-in iframe with a pop-out to a standalone window.
+  const popOutGuide = (html: string, title: string): void => {
+    const w = window.open('', '_blank', 'width=1100,height=850,resizable=yes,scrollbars=yes');
+    if (w) { w.document.write(html); w.document.close(); w.document.title = title; }
+  };
   const [savingId, setSavingId]         = useState<number | null>(null);
   const [decliningId, setDecliningId]   = useState<number | null>(null);
   const [declineNote, setDeclineNote]   = useState('');
@@ -1509,6 +1519,23 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           onCreated={() => new CseRequestService(sp).getAll().then(all => setRequests(all)).catch(() => undefined)} />
       )}
 
+      {/* In-app guide panels (SE / SSE / SED) — slide-in iframe with pop-out */}
+      {openGuide && (() => {
+        const g = openGuide === 'se'  ? { html: SE_GUIDE_HTML,  title: 'SE Guide' }
+                : openGuide === 'sse' ? { html: SSE_GUIDE_HTML, title: 'SSE Guide' }
+                :                       { html: SED_GUIDE_HTML, title: 'SED / Admin Guide' };
+        return (
+          <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '55%', minWidth: 480, maxWidth: 900, background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ background: HPE_NAVY, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{g.title}</span>
+              <button onClick={() => popOutGuide(g.html, g.title)} style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, padding: '4px 12px', cursor: 'pointer' }}>↗ Pop Out</button>
+              <button onClick={() => setOpenGuide('')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 4, color: '#fff', fontSize: 13, fontWeight: 700, padding: '4px 12px', cursor: 'pointer' }}>✕ Close</button>
+            </div>
+            <iframe srcDoc={g.html} style={{ flex: 1, border: 'none', width: '100%' }} title={g.title} />
+          </div>
+        );
+      })()}
+
       {/* URL action result banner */}
       {urlActionBanner && (
         <div style={{
@@ -1546,6 +1573,9 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           <a href={POC_HOME_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>POC Manager</a>
           <a href={INSIGHTS_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>📊 SSE Demand Insights</a>
           <a href={AVAILABILITY_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>🗓️ SSE Availability</a>
+          <button onClick={() => setOpenGuide('se')} style={HDR_OUTLINE}>📖 SE Guide</button>
+          <button onClick={() => setOpenGuide('sse')} style={HDR_OUTLINE}>📖 SSE Guide</button>
+          {(isSED || isAdmin) && <button onClick={() => setOpenGuide('sed')} style={HDR_OUTLINE}>📖 SED Guide</button>}
           {isAdmin && <button onClick={() => setShowAdmin(true)} style={HDR_OUTLINE}>Admin</button>}
           <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</span>
         </div>
