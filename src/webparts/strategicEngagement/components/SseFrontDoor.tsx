@@ -4,6 +4,7 @@ import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { StrategicEngagementForm } from './StrategicEngagementForm';
 import { HPE_GREEN, HPE_NAVY } from '../../../styles/hpe';
+import { APP_VERSION } from '../../../appVersion';
 
 export interface ISseFrontDoorProps {
   sp: SPFI;
@@ -61,7 +62,10 @@ export const SseFrontDoor: React.FC<ISseFrontDoorProps> = ({ sp, context }) => {
             <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — Strategic Systems Engineer</div>
           </div>
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap' }}>{greeting()}, {firstName(userDisplayName)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap' }}>{greeting()}, {firstName(userDisplayName)}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{APP_VERSION}</div>
+        </div>
       </div>
 
       <div style={{ fontSize: 14, color: '#605e5c', marginBottom: 16, textAlign: 'center' }}>What do you need to do?</div>

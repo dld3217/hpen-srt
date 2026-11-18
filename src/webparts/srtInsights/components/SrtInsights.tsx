@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { APP_VERSION } from '../../../appVersion';
+import { userGreeting } from '../../../greeting';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { Spinner, SpinnerSize } from '@fluentui/react';
@@ -49,7 +50,7 @@ const Bar: React.FC<{ label: string; count: number; max: number; color: string }
   </div>
 );
 
-export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
+export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp, context }) => {
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<ICseRequest[]>([]);
   const [sseSort, setSseSort] = useState<{ field: 'name' | 'active' | 'strategic' | 'poc'; dir: 'asc' | 'desc' }>({ field: 'active', dir: 'desc' });
@@ -190,6 +191,7 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp }) => {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap' }}>{userGreeting(context.pageContext.user.displayName)}</div>
           <a href={SRT_DASHBOARD_URL}
             style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)',
               borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>

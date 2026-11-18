@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { APP_VERSION } from '../../../appVersion';
 import { SPFI } from '@pnp/sp';
 import { WebPartContext } from '@microsoft/sp-webpart-base';
 import { MSGraphClientV3 } from '@microsoft/sp-http';
@@ -80,7 +81,7 @@ const EMPTY_FORM: ISseFormData = {
   extraSses: [],
 };
 
-const VERSION = '1.0.63';
+const VERSION = APP_VERSION;
 
 const greeting = (): string => {
   const h = new Date().getHours();
