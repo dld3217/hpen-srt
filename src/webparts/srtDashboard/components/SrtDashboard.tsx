@@ -1560,7 +1560,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', marginRight: 4 }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
+          <span style={{ fontSize: 18, fontWeight: 400, color: '#fff', marginRight: 4 }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
           {/* Create actions (green) */}
           <a href={`${FRONT_DOOR_URL}?form=strategic`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New SSE Request</a>
           <a href={`${POC_HOME_URL}?new=1`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New POC</a>
@@ -1575,7 +1575,7 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           <button onClick={() => setOpenGuide('sse')} style={HDR_OUTLINE}>📖 SSE Guide</button>
           {(isSED || isAdmin) && <button onClick={() => setOpenGuide('sed')} style={HDR_OUTLINE}>📖 SED Guide</button>}
           {isAdmin && <button onClick={() => setShowAdmin(true)} style={HDR_OUTLINE}>Admin</button>}
-          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</span>
         </div>
       </div>
 

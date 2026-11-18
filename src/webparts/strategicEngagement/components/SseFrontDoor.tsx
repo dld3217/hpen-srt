@@ -61,8 +61,8 @@ export const SseFrontDoor: React.FC<ISseFrontDoorProps> = ({ sp, context }) => {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap' }}>{greeting()}, {firstName(userDisplayName)}</div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{APP_VERSION}</div>
+          <div style={{ fontSize: 18, fontWeight: 400, color: '#fff', whiteSpace: 'nowrap' }}>{greeting()}, {firstName(userDisplayName)}</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{APP_VERSION}</div>
         </div>
       </div>
 

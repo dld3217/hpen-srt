@@ -484,8 +484,8 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
             SRT Dashboard ↗
           </a>
           <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)' }}>{greeting()}, {firstName(userDisplayName)}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', letterSpacing: '0.5px' }}>v{VERSION}</div>
+            <div style={{ fontSize: 18, fontWeight: 400, color: '#fff' }}>{greeting()}, {firstName(userDisplayName)}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
           </div>
         </div>
       </div>

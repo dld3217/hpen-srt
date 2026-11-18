@@ -124,12 +124,12 @@ export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp, context }
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap' }}>{userGreeting(context.pageContext.user.displayName)}</div>
+          <div style={{ fontSize: 18, fontWeight: 400, color: '#fff', whiteSpace: 'nowrap' }}>{userGreeting(context.pageContext.user.displayName)}</div>
           <a href={SRT_DASHBOARD_URL}
             style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
             ← SRT Dashboard
           </a>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
         </div>
       </div>
 
