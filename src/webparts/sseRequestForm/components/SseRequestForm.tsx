@@ -470,23 +470,21 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
     <div style={{ maxWidth: 700, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
 
       {/* Header */}
-      <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>SSE Support Request</div>
+      <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>SSE Support Request</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 18, fontWeight: 400, color: '#fff' }}>{greeting()}, {firstName(userDisplayName)}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <a href="https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx"
             target="_blank" rel="noreferrer"
             style={{ padding: '4px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)',
               borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>
             SRT Dashboard ↗
           </a>
-          <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-            <div style={{ fontSize: 18, fontWeight: 400, color: '#fff' }}>{greeting()}, {firstName(userDisplayName)}</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
-          </div>
         </div>
       </div>
 

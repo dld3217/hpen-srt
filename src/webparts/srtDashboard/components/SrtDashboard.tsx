@@ -1553,14 +1553,17 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       )}
 
       {/* Header */}
-      <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>SRT Dashboard</div>
+      <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Row 1: name left, greeting + version right (same as POC Manager) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>SRT Dashboard</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ fontSize: 18, fontWeight: 400, color: '#fff', whiteSpace: 'nowrap' }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</span>
           </div>
         </div>
+        {/* Row 2: action + navigation buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 18, fontWeight: 400, color: '#fff', marginRight: 4 }}>{(() => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; })()}, {userName}</span>
           {/* Create actions (green) */}
           <a href={`${FRONT_DOOR_URL}?form=strategic`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New SSE Request</a>
           <a href={`${POC_HOME_URL}?new=1`} target="_blank" rel="noreferrer" style={HDR_GREEN}>+ New POC</a>
@@ -1575,7 +1578,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           <button onClick={() => setOpenGuide('sse')} style={HDR_OUTLINE}>📖 SSE Guide</button>
           {(isSED || isAdmin) && <button onClick={() => setOpenGuide('sed')} style={HDR_OUTLINE}>📖 SED Guide</button>}
           {isAdmin && <button onClick={() => setShowAdmin(true)} style={HDR_OUTLINE}>Admin</button>}
-          <span style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</span>
         </div>
       </div>
 

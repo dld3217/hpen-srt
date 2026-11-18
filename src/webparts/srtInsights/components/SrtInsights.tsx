@@ -182,20 +182,20 @@ export const SrtInsights: React.FC<ISrtInsightsProps> = ({ sp, context }) => {
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', padding: '20px 16px', fontFamily: 'inherit' }}>
       {/* Header */}
-      <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 18px', borderRadius: '6px 6px 0 0', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>SSE Demand Insights</div>
+      <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 18px', borderRadius: '6px 6px 0 0', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>SSE Demand Insights</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ fontSize: 18, fontWeight: 400, color: '#fff', whiteSpace: 'nowrap' }}>{userGreeting(context.pageContext.user.displayName)}</div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 400, color: '#fff', whiteSpace: 'nowrap' }}>{userGreeting(context.pageContext.user.displayName)}</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <a href={SRT_DASHBOARD_URL}
             style={{ padding: '5px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)',
               borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
             ← SRT Dashboard
           </a>
-          <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
         </div>
       </div>
 
