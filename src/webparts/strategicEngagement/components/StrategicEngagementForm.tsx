@@ -596,10 +596,8 @@ export const StrategicEngagementForm: React.FC<IStrategicEngagementFormProps> = 
       {/* Header */}
       <div style={{ background: HPE_NAVY, color: '#fff', padding: '8px 16px', borderRadius: '6px 6px 0 0', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 3, height: 22, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.2 }}>Strategic Engagement Request</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — SSE time outside an active POC</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>Strategic Engagement Request</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, whiteSpace: 'nowrap' }}>

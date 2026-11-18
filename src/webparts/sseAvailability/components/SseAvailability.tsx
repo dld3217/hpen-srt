@@ -119,10 +119,8 @@ export const SseAvailability: React.FC<ISseAvailabilityProps> = ({ sp, context }
       {/* Header */}
       <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 18px', borderRadius: '6px 6px 0 0', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 3, height: 24, background: HPE_GREEN, borderRadius: 2, flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>🗓️ SSE Availability</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — Strategic SSE roster &amp; upcoming commitments</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>🗓️ SSE Availability</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

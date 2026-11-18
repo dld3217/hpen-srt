@@ -1555,10 +1555,8 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
       {/* Header */}
       <div style={{ background: HPE_NAVY, color: '#fff', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 3, height: 24, background: HPE_GREEN, borderRadius: 2 }} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>SRT Dashboard</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)' }}>HPE Networking — SSE Support Request Tracker</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>SRT Dashboard</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
