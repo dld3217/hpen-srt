@@ -1571,7 +1571,6 @@ export const SrtDashboard: React.FC<ISrtDashboardProps> = ({ sp, context }) => {
           {(isAdmin || isSED || isSSE || sseEmails.has(userEmail)) && <button onClick={() => setShowScheduleMyself(true)} title="Block personal time (PTO, holidays, appointments) on your availability" style={HDR_GREEN}>🗓️ Schedule Myself</button>}
           <span style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.25)' }} />
           {/* Navigation (outline) */}
-          <a href={POC_HOME_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>POC Manager</a>
           <a href={INSIGHTS_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>📊 SSE Demand Insights</a>
           <a href={AVAILABILITY_URL} target="_blank" rel="noreferrer" style={HDR_OUTLINE}>🗓️ SSE Availability</a>
           <button onClick={() => setOpenGuide('se')} style={HDR_OUTLINE}>📖 SE Guide</button>
