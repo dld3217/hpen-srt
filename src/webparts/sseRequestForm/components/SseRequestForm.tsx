@@ -478,14 +478,6 @@ export const SseRequestForm: React.FC<ISseRequestFormProps> = ({ sp, context }) 
             <div style={{ fontSize: 14, fontWeight: 500, color: 'rgba(255,255,255,0.75)' }}>v{VERSION}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <a href="https://hpe.sharepoint.com/teams/hpen-poc-manager/SitePages/SRT-Resource-Dashboard.aspx"
-            target="_blank" rel="noreferrer"
-            style={{ padding: '4px 14px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.35)',
-              borderRadius: 4, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            SRT Dashboard ↗
-          </a>
-        </div>
       </div>
 
       {validationErrors.length > 0 && (
